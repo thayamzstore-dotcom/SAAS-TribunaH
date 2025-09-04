@@ -1462,23 +1462,16 @@ def process_watermark(payload, request):
                 # URL pública do arquivo
                 public_file_url = f"{request.url_root}uploads/{unique_filename}"
                 
-                # Configurar layers para o Placid - tentando diferentes nomes de layers
+                # Configurar layers para o Placid com nomes corretos
                 layers = {
-                    "image": {
+                    "imgprincipal": {
                         "image": public_file_url
                     },
-                    "logo": {
+                    "logomarca": {
                         "image": "https://via.placeholder.com/200x100/FF0000/FFFFFF?text=TRIBUNA+HOJE"
-                    }
-                }
-                
-                # Tentar também com nomes alternativos
-                layers_alt = {
-                    "background": {
-                        "image": public_file_url
                     },
-                    "watermark": {
-                        "image": "https://via.placeholder.com/200x100/FF0000/FFFFFF?text=TRIBUNA+HOJE"
+                    "seglogomarca": {
+                        "image": "https://via.placeholder.com/100x50/000000/FFFFFF?text=LOGO"
                     }
                 }
                 
@@ -1490,45 +1483,18 @@ def process_watermark(payload, request):
                     "filename": f"watermarked_{timestamp}.png"
                 }
                 
-                print(f"DEBUG - Layers principais: {layers}")
-                print(f"DEBUG - Layers alternativos: {layers_alt}")
+                print(f"DEBUG - Layers para marca d'água: {layers}")
                 
                 # Criar imagem no Placid
                 template_uuid = PLACID_TEMPLATES['watermark']['uuid']
                 print(f"Criando imagem no Placid com template: {template_uuid}")
                 
-                # Primeiro, obter informações do template para descobrir os layers corretos
-                template_info = get_placid_template(template_uuid)
-                
-                # Tentar primeiro com layers principais
+                # Criar imagem com layers corretos
                 image_result = create_placid_image(
                     template_uuid=template_uuid,
                     layers=layers,
                     modifications=modifications
                 )
-                
-                # Se falhar, tentar com layers alternativos
-                if not image_result:
-                    print("Tentando com layers alternativos...")
-                    image_result = create_placid_image(
-                        template_uuid=template_uuid,
-                        layers=layers_alt,
-                        modifications=modifications
-                    )
-                
-                # Se ainda falhar, tentar apenas com a imagem principal
-                if not image_result:
-                    print("Tentando apenas com imagem principal...")
-                    layers_simple = {
-                        "image": {
-                            "image": public_file_url
-                        }
-                    }
-                    image_result = create_placid_image(
-                        template_uuid=template_uuid,
-                        layers=layers_simple,
-                        modifications=modifications
-                    )
                 
                 if image_result:
                     image_id = image_result.get('id')
@@ -1609,6 +1575,12 @@ def process_generate_post(payload, request):
                     },
                     "titulocopy": {
                         "text": title
+                    },
+                    "logomarca": {
+                        "image": "https://via.placeholder.com/200x100/FF0000/FFFFFF?text=TRIBUNA+HOJE"
+                    },
+                    "seglogomarca": {
+                        "image": "https://via.placeholder.com/100x50/000000/FFFFFF?text=LOGO"
                     }
                 }
                 
@@ -1629,7 +1601,7 @@ def process_generate_post(payload, request):
                 elif template_type == 'story':
                     # Templates de Story: imgfundo (fundo vermelho texturizado)
                     layers["imgfundo"] = {"image": "https://via.placeholder.com/1080x1920/FF0000/FFFFFF?text=FUNDO+VERMELHO"}
-                # Templates de Reels: mantém apenas imgprincipal e titulocopy
+                # Templates de Reels: mantém apenas imgprincipal, titulocopy, logomarca, seglogomarca
                 
                 # Modificações baseadas no template selecionado
                 modifications = {
