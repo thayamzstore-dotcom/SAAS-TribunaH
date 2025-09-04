@@ -21,7 +21,8 @@ PLACID_TEMPLATES = {
         'uuid': 'x9jxylt4vx2x0',
         'name': 'Marca d\'Água',
         'description': 'Template para aplicar marca d\'água',
-        'type': 'watermark'
+        'type': 'watermark',
+        'dimensions': {'width': 1200, 'height': 1200}
     },
     'stories_1': {
         'uuid': 'g7wi0hogpxx5c',
@@ -570,47 +571,44 @@ HTML_TEMPLATE = """
             <!-- Aba Marca d'Água -->
             <div id="marca-dagua" class="tab-content active">
                 <h2>Aplicar Marca d'Água</h2>
+                
                 <div class="upload-area" onclick="document.getElementById('watermark-file').click()">
                     <div class="upload-icon">📁</div>
-                    <div class="upload-text">Clique para fazer upload ou arraste sua foto/vídeo aqui</div>
+                    <div class="upload-text">Upload da foto ou vídeo</div>
                     <div class="upload-subtext">Formatos suportados: JPG, PNG, MP4, MOV</div>
                 </div>
                 <input type="file" id="watermark-file" class="file-input" accept="image/*,video/*" onchange="handleFileUpload(this, 'watermark')">
 
-                <div class="controls-section">
-                    <div class="control-group">
-                        <label class="control-label">Posição da Marca d'Água</label>
-                        <select class="control-input" id="watermark-position">
-                            <option value="bottom-right">Inferior Direita</option>
-                            <option value="bottom-left">Inferior Esquerda</option>
-                            <option value="top-right">Superior Direita</option>
-                            <option value="top-left">Superior Esquerda</option>
-                            <option value="center">Centro</option>
-                        </select>
+                <div class="two-column">
+                    <div>
+                        <div class="controls-section">
+                            <div class="control-group">
+                                <label class="control-label">Título *</label>
+                                <input type="text" class="control-input" id="watermark-titulo" placeholder="Digite o título da marca d'água" required>
+                            </div>
+                        </div>
+
+                        <div class="loading" id="watermark-loading">
+                            <div class="spinner"></div>
+                            <p>Aplicando marca d'água...</p>
+                        </div>
+
+                        <div class="success-message" id="watermark-success"></div>
+                        <div class="error-message" id="watermark-error"></div>
+
+                        <button class="btn btn-primary" onclick="applyWatermark()">🎨 Aplicar Marca d'Água</button>
                     </div>
-                    <div class="control-group">
-                        <label class="control-label">Transparência: <span id="transparency-value">50%</span></label>
-                        <input type="range" class="range-input" id="transparency" min="0" max="100" value="50" oninput="updateTransparency(this.value)">
+                    <div>
+                        <div class="preview-area">
+                            <div class="preview-placeholder" id="watermark-preview">
+                                Pré-visualização da marca d'água aparecerá aqui
+                            </div>
+                        </div>
+                        <button class="btn btn-success" onclick="downloadFile('watermark')">📥 Download</button>
+                        <a href="#" id="open-watermark-image" class="btn btn-secondary" style="margin-left: 10px; display: none;" target="_blank">🖼️ Abrir Imagem</a>
                     </div>
                 </div>
-
-                <div class="preview-area">
-                    <div class="preview-placeholder" id="watermark-preview">
-                        Pré-visualização aparecerá aqui
-                    </div>
-                </div>
-
-                <div class="loading" id="watermark-loading">
-                    <div class="spinner"></div>
-                    <p>Aplicando marca d'água...</p>
-                </div>
-
-                <div class="success-message" id="watermark-success"></div>
-                <div class="error-message" id="watermark-error"></div>
-
-                <button class="btn btn-primary" onclick="applyWatermark()">Aplicar Marca d'Água</button>
-                <button class="btn btn-success" onclick="downloadFile(\'watermark\')">📥 Download</button>
-                <a href="#" id="open-watermark-image" class="btn btn-secondary" style="margin-left: 10px; display: none;" target="_blank">🖼️ Abrir Imagem</a>           </div>
+            </div>
 
             <!-- Aba Gerar Posts -->
             <div id="gerar-posts" class="tab-content">
@@ -946,13 +944,15 @@ HTML_TEMPLATE = """
             }
         }
 
-        // Função para atualizar transparência
-        function updateTransparency(value) {
-            document.getElementById('transparency-value').textContent = value + '%';
-        }
 
         // Função para aplicar marca d'água
         async function applyWatermark() {
+            const titulo = document.getElementById('watermark-titulo').value;
+            if (!titulo) {
+                showError('O título é obrigatório.', 'watermark');
+                return;
+            }
+            
             if (!uploadedFiles.watermark) {
                 showError('Por favor, faça upload de um arquivo primeiro.', 'watermark');
                 return;
@@ -960,13 +960,10 @@ HTML_TEMPLATE = """
             
             showLoading('watermark');
             
-            const position = document.getElementById('watermark-position').value;
-            const transparency = document.getElementById('transparency').value;
             const apiResult = await sendToAPI("apply_watermark", {
                 fileType: uploadedFiles.watermark.type,
                 fileName: uploadedFiles.watermark.name,
-                position: position,
-                transparency: transparency
+                title: titulo
             });
 
             hideLoading('watermark');
@@ -977,7 +974,7 @@ HTML_TEMPLATE = """
                     preview.innerHTML = `<img src="${apiResult.imageUrl}" style="max-width: 100%; max-height: 300px; border-radius: 10px;">`;
                     showSuccess('Marca d\\'água aplicada com sucesso!', 'watermark');
                     document.getElementById('open-watermark-image').href = apiResult.imageUrl;
-                    document.getElementById('open-watermark-image').style.display = 'inline-block';;
+                    document.getElementById('open-watermark-image').style.display = 'inline-block';
                 } else {
                     showSuccess('Marca d\\\'água processada com sucesso!', 'watermark');
                 }
@@ -1345,7 +1342,7 @@ def process_request():
         return jsonify(response_data), 400
 
 def process_watermark(payload, request):
-    """Processa aplicação de marca d'água usando Placid"""
+    """Processa aplicação de marca d'água usando Placid (mesmo sistema dos posts)"""
     response_data = {"success": False}
     
     # Verificar se há arquivo
@@ -1366,27 +1363,48 @@ def process_watermark(payload, request):
                 # URL pública do arquivo
                 public_file_url = f"{request.url_root}uploads/{unique_filename}"
                 
-                # Configurar layers para o Placid
+                # Configurar layers baseado no template de marca d'água
+                template_key = 'watermark'
+                title = payload.get('title', '')
+                
+                # Verificar se o template existe
+                if template_key not in PLACID_TEMPLATES:
+                    template_key = 'watermark'  # Fallback
+                
+                template_info = PLACID_TEMPLATES[template_key]
+                template_uuid = template_info['uuid']
+                template_type = template_info.get('type', 'watermark')
+                template_dimensions = template_info.get('dimensions', {'width': 1200, 'height': 1200})
+                
+                # Configurar layers baseado no template de marca d'água
                 layers = {
                     "imgprincipal": {
                         "image": public_file_url
                     },
-                    "logomarca": {
-                        "image": "https://via.placeholder.com/100x50/000000/FFFFFF?text=LOGO"  # Substitua pela URL do seu logo
+                    "titulocopy": {
+                        "text": title
                     }
                 }
                 
-                # Modificações baseadas nos parâmetros
-                position = payload.get('position', 'bottom-right')
-                transparency = int(payload.get('transparency', 50))
+                # Adicionar layers específicos para marca d'água
+                if template_type == 'watermark':
+                    # Template de marca d'água: adicionar logo
+                    layers["logomarca"] = {
+                        "image": "https://via.placeholder.com/100x50/000000/FFFFFF?text=LOGO"  # Substitua pela URL do seu logo
+                    }
                 
+                # Modificações baseadas no template selecionado
                 modifications = {
-                    "filename": f"watermarked_{timestamp}.png"
+                    "filename": f"watermarked_{timestamp}.png",
+                    "width": template_dimensions['width'],
+                    "height": template_dimensions['height'],
+                    "image_format": "auto",  # jpg/png automático
+                    "dpi": 72,  # DPI da imagem
+                    "color_mode": "rgb"  # Cor RGB
                 }
                 
                 # Criar imagem no Placid
-                template_uuid = PLACID_TEMPLATES['watermark']['uuid']
-                print(f"Criando imagem no Placid com template: {template_uuid}")
+                print(f"Criando marca d'água no Placid com template: {template_uuid} ({PLACID_TEMPLATES[template_key]['name']})")
                 image_result = create_placid_image(
                     template_uuid=template_uuid,
                     layers=layers,
@@ -1395,7 +1413,7 @@ def process_watermark(payload, request):
                 
                 if image_result:
                     image_id = image_result.get('id')
-                    print(f"Imagem criada com ID: {image_id}")
+                    print(f"Marca d'água criada com ID: {image_id}")
                     
                     # Aguardar conclusão
                     final_image = poll_placid_image_status(image_id)
@@ -1403,11 +1421,11 @@ def process_watermark(payload, request):
                         response_data['success'] = True
                         response_data['imageUrl'] = final_image['image_url']
                         response_data['message'] = "Marca d'água aplicada com sucesso!"
-                        print(f"Imagem finalizada: {final_image['image_url']}")
+                        print(f"Marca d'água finalizada: {final_image['image_url']}")
                     else:
-                        response_data['message'] = "Erro ao processar imagem no Placid"
+                        response_data['message'] = "Erro ao processar marca d'água no Placid"
                 else:
-                    response_data['message'] = "Erro ao criar imagem no Placid"
+                    response_data['message'] = "Erro ao criar marca d'água no Placid"
                     
             except Exception as e:
                 print(f"Erro ao processar marca d'água: {e}")
