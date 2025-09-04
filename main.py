@@ -1433,6 +1433,25 @@ def process_watermark(payload, request):
                 base_url = request.url_root.rstrip('/')
                 public_file_url = f"{base_url}/uploads/{unique_filename}"
                 print(f"URL pública do arquivo: {public_file_url}")
+                print(f"Arquivo salvo em: {file_path}")
+                print(f"Base URL: {base_url}")
+                print(f"Nome do arquivo: {unique_filename}")
+                
+                # Testar se a URL está acessível
+                try:
+                    test_response = requests.get(public_file_url, timeout=5)
+                    print(f"✅ URL da imagem acessível: {test_response.status_code}")
+                except Exception as e:
+                    print(f"❌ URL da imagem não acessível: {e}")
+                    # Tentar URL alternativa
+                    alt_url = f"http://localhost:5000/uploads/{unique_filename}"
+                    print(f"Tentando URL alternativa: {alt_url}")
+                    try:
+                        test_response = requests.get(alt_url, timeout=5)
+                        print(f"✅ URL alternativa acessível: {test_response.status_code}")
+                        public_file_url = alt_url
+                    except Exception as e2:
+                        print(f"❌ URL alternativa também não acessível: {e2}")
                 
                 # Configurar template de marca d'água
                 template_key = 'watermark'  # Template de marca d'água
@@ -1496,6 +1515,7 @@ def process_watermark(payload, request):
                         response_data['success'] = True
                         response_data['imageUrl'] = final_image['image_url']
                         response_data['message'] = "Marca d'água aplicada com sucesso!"
+                        response_data['originalImageUrl'] = public_file_url
                         print(f"Marca d'água finalizada: {final_image['image_url']}")
                     else:
                         response_data['message'] = "Erro ao processar marca d'água no Placid"
@@ -1503,7 +1523,8 @@ def process_watermark(payload, request):
                         # Fallback: retornar a imagem original
                         response_data['success'] = True
                         response_data['imageUrl'] = public_file_url
-                        response_data['message'] = "Arquivo processado (marca d'água temporariamente indisponível)"
+                        response_data['originalImageUrl'] = public_file_url
+                        response_data['message'] = f"Arquivo processado (marca d'água temporariamente indisponível). URL da imagem: {public_file_url}"
                 else:
                     # Fallback: criar marca d'água local
                     print("Falha na criação da marca d'água no Placid - usando fallback local")
@@ -1514,13 +1535,15 @@ def process_watermark(payload, request):
                         watermark_url = f"{base_url}/uploads/{watermark_filename}"
                         response_data['success'] = True
                         response_data['imageUrl'] = watermark_url
-                        response_data['message'] = "Marca d'água aplicada com sucesso (método local)!"
+                        response_data['originalImageUrl'] = public_file_url
+                        response_data['message'] = f"Marca d'água aplicada com sucesso (método local)! URL original: {public_file_url}"
                         print(f"Fallback local: marca d'água criada em {watermark_url}")
                     else:
                         # Último recurso: retornar a imagem original
                         response_data['success'] = True
                         response_data['imageUrl'] = public_file_url
-                        response_data['message'] = "Arquivo processado (marca d'água temporariamente indisponível)"
+                        response_data['originalImageUrl'] = public_file_url
+                        response_data['message'] = f"Arquivo processado (marca d'água temporariamente indisponível). URL da imagem: {public_file_url}"
                         print(f"Fallback: retornando imagem original: {public_file_url}")
                     
             except Exception as e:
