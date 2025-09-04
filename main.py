@@ -1446,31 +1446,13 @@ def process_watermark(payload, request):
                 template_type = template_info.get('type', 'watermark')
                 template_dimensions = template_info.get('dimensions', {'width': 1200, 'height': 1200})
                 
-                # Configurar layers baseado no template de marca d'água
-                # Usar uma URL de logo real ou criar um logo simples
-                logo_url = "https://via.placeholder.com/200x100/FF0000/FFFFFF?text=TRIBUNA+HOJE"
-                
-                # Tentar diferentes estruturas de layers baseado no template
+                # Para template de marca d'água, só precisa da imagem principal
+                # A logo já está no template do Placid
                 layers = {
                     "imgprincipal": {
                         "image": public_file_url
-                    },
-                    "logomarca": {
-                        "image": logo_url
                     }
                 }
-                
-                # Se o template não funcionar, tentar estrutura alternativa
-                if template_uuid == 'x9jxylt4vx2x0':
-                    # Estrutura específica para o template de marca d'água
-                    layers = {
-                        "background": {
-                            "image": public_file_url
-                        },
-                        "watermark": {
-                            "image": logo_url
-                        }
-                    }
                 
                 # Modificações baseadas no template selecionado
                 modifications = {
@@ -1496,7 +1478,6 @@ def process_watermark(payload, request):
                 print(f"Layers enviados: {layers}")
                 print(f"Modifications enviadas: {modifications}")
                 print(f"URL da imagem principal: {public_file_url}")
-                print(f"URL do logo: {logo_url}")
                 
                 image_result = create_placid_image(
                     template_uuid=template_uuid,
