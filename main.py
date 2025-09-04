@@ -7,7 +7,12 @@ import io
 from datetime import datetime
 import os
 import re
-from PIL import Image, ImageDraw, ImageFont
+try:
+    from PIL import Image, ImageDraw, ImageFont
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+    print("PIL/Pillow não disponível - funcionalidade de marca d'água local será limitada")
 
 app = Flask(__name__)
 CORS(app)
@@ -190,6 +195,10 @@ def create_local_watermark(image_path, output_path):
     """
     Cria uma marca d'água local usando Pillow como fallback
     """
+    if not PIL_AVAILABLE:
+        print("PIL não disponível - não é possível criar marca d'água local")
+        return False
+        
     try:
         # Abrir a imagem original
         with Image.open(image_path) as img:
@@ -915,7 +924,7 @@ HTML_TEMPLATE = """
             const slug = title
                 .toLowerCase()
                 .normalize("NFD")
-                .replace(/[^\w\s-]/g, "")
+                .replace(/[^\\w\\s-]/g, "")
                 .replace(/\s+/g, "-")
                 .replace(/--+/g, "-");
             document.getElementById("slug-preview").textContent = `Link Sugerido: ${window.location.origin}/post/${slug}`;
@@ -1811,5 +1820,19 @@ if __name__ == '__main__':
     print(f"📋 Templates disponíveis: {len(PLACID_TEMPLATES)}")
     for key, template in PLACID_TEMPLATES.items():
         print(f"   - {template['name']}: {template['uuid']}")
-    print(f"🌐 Servidor rodando em: http://0.0.0.0:5000" )
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    
+    # Verificar se PIL está disponível
+    if PIL_AVAILABLE:
+        print("✅ PIL/Pillow disponível - marca d'água local funcionará")
+    else:
+        print("⚠️ PIL/Pillow não disponível - apenas marca d'água via Placid")
+    
+    # Configuração para produção vs desenvolvimento
+    import os
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_ENV') != 'production'
+    
+    print(f"🌐 Servidor rodando em: http://0.0.0.0:{port}")
+    print(f"🔧 Modo debug: {debug}")
+    
+    app.run(debug=debug, host='0.0.0.0', port=port)
