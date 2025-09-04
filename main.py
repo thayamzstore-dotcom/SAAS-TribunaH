@@ -63,7 +63,7 @@ PLACID_TEMPLATES = {
         'uuid': '1wubmwdwwturf',
         'name': 'Watermark1',
         'description': 'Template para Watermark',
-        'type': 'feed',
+        'type': 'watermark',
         'dimensions': {'width': 1200, 'height': 1200}
     },
     'feed_2_white': {
@@ -110,11 +110,19 @@ def create_placid_image(template_uuid, layers, modifications=None, webhook_succe
         payload['webhook_success'] = webhook_success
     
     try:
+        print(f"DEBUG - Enviando para Placid: {PLACID_API_URL}")
+        print(f"DEBUG - Payload: {payload}")
+        print(f"DEBUG - Headers: {headers}")
+        
         response = requests.post(PLACID_API_URL, json=payload, headers=headers)
+        print(f"DEBUG - Status code: {response.status_code}")
+        print(f"DEBUG - Response: {response.text}")
+        
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
-        print(f"Erro ao criar imagem no Placid: {e}")
+        print(f"ERRO ao criar imagem no Placid: {e}")
+        print(f"DEBUG - Response text: {response.text if 'response' in locals() else 'N/A'}")
         return None
 
 def get_placid_image(image_id):
@@ -629,7 +637,7 @@ HTML_TEMPLATE = """
                             <div class="template-preview">🔴</div>
                             <p>Feed - Modelo 1 (Red)</p>
                         </div>
-                        <div class="template-item" onclick="selectTemplate('feed_1_red_copy')">
+                        <div class="template-item" onclick="selectTemplate('watermark1')">
                             <div class="template-preview">🔴</div>
                             <p>WaterMark1</p>
                         </div>
@@ -1391,12 +1399,18 @@ def process_generate_post(payload, request):
                 
                 # Verificar se o template existe
                 if template_key not in PLACID_TEMPLATES:
+                    print(f"ERRO - Template '{template_key}' não encontrado!")
+                    print(f"Templates disponíveis: {list(PLACID_TEMPLATES.keys())}")
                     template_key = 'feed_1_red'  # Fallback
                 
                 template_info = PLACID_TEMPLATES[template_key]
                 template_uuid = template_info['uuid']
                 template_type = template_info.get('type', 'feed')
                 template_dimensions = template_info.get('dimensions', {'width': 1080, 'height': 1080})
+                
+                print(f"DEBUG - Template info: {template_info}")
+                print(f"DEBUG - Template UUID: {template_uuid}")
+                print(f"DEBUG - Template type: {template_type}")
                 
                 # Configurar layers baseado no tipo de template
                 layers = {
