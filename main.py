@@ -1041,7 +1041,15 @@ HTML_TEMPLATE = """
                     generatedImageUrls.watermark = apiResult.imageUrl;
                     const preview = document.getElementById('watermark-preview');
                     preview.innerHTML = `<img src="${apiResult.imageUrl}" style="max-width: 100%; max-height: 300px; border-radius: 10px;">`;
-                    showSuccess('Marca d\\'água aplicada com sucesso!', 'watermark');
+                    
+                    // Mostrar link da imagem original se disponível
+                    let message = 'Marca d\'água aplicada com sucesso!';
+                    if (apiResult.originalImageUrl) {
+                        console.log('🔗 Link da sua imagem original:', apiResult.originalImageUrl);
+                        message += `<br><br><strong>Link da sua imagem:</strong><br><a href="${apiResult.originalImageUrl}" target="_blank">${apiResult.originalImageUrl}</a>`;
+                    }
+                    
+                    showSuccess(message, 'watermark');
                     document.getElementById('open-watermark-image').href = apiResult.imageUrl;
                     document.getElementById('open-watermark-image').style.display = 'inline-block';
                 } else {
