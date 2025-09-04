@@ -645,49 +645,13 @@ HTML_TEMPLATE = """
 
         <div class="tabs-container">
             <div class="tabs-nav">
-                <button class="tab-button active" onclick="switchTab('marca-dagua')">🏷️ Marca d'Água</button>
-                <button class="tab-button" onclick="switchTab('gerar-posts')">📱 Gerar Posts</button>
+                <button class="tab-button active" onclick="switchTab('gerar-posts')">📱 Gerar Posts</button>
                 <button class="tab-button" onclick="switchTab('noticia-titulo')">🤖 Notícia e Título</button>
                 <button class="tab-button" onclick="switchTab('legendas')">✍️ Legendas IA</button>
             </div>
 
-            <!-- Aba Marca d'Água -->
-            <div id="marca-dagua" class="tab-content active">
-                <h2>Aplicar Marca d'Água</h2>
-                
-                <div class="upload-area" onclick="document.getElementById('watermark-file').click()">
-                    <div class="upload-icon">📁</div>
-                    <div class="upload-text">Upload da foto ou vídeo</div>
-                    <div class="upload-subtext">Formatos suportados: JPG, PNG, MP4, MOV</div>
-                </div>
-                <input type="file" id="watermark-file" class="file-input" accept="image/*,video/*" onchange="handleFileUpload(this, 'watermark')">
-
-                <div class="two-column">
-                    <div>
-                <div class="loading" id="watermark-loading">
-                    <div class="spinner"></div>
-                    <p>Aplicando marca d'água...</p>
-                </div>
-
-                <div class="success-message" id="watermark-success"></div>
-                <div class="error-message" id="watermark-error"></div>
-
-                        <button class="btn btn-primary" onclick="applyWatermark()">🎨 Aplicar Marca d'Água</button>
-                    </div>
-                    <div>
-                        <div class="preview-area">
-                            <div class="preview-placeholder" id="watermark-preview">
-                                Pré-visualização da marca d'água aparecerá aqui
-                            </div>
-                        </div>
-                        <button class="btn btn-success" onclick="downloadFile('watermark')">📥 Download</button>
-                        <a href="#" id="open-watermark-image" class="btn btn-secondary" style="margin-left: 10px; display: none;" target="_blank">🖼️ Abrir Imagem</a>
-                    </div>
-                </div>
-            </div>
-
             <!-- Aba Gerar Posts -->
-            <div id="gerar-posts" class="tab-content">
+            <div id="gerar-posts" class="tab-content active">
                 <h2>Gerar Posts para Instagram</h2>
                 
                 <div class="upload-area" onclick="document.getElementById('post-file').click()">
@@ -716,7 +680,11 @@ HTML_TEMPLATE = """
 
                     <h3>Templates Disponíveis</h3>
                     <div class="template-grid" id="template-grid">
-                        <div class="template-item selected" onclick="selectTemplate('stories_1')">
+                        <div class="template-item selected" onclick="selectTemplate('watermark')">
+                            <div class="template-preview">🏷️</div>
+                            <p>Marca d'Água</p>
+                        </div>
+                        <div class="template-item" onclick="selectTemplate('stories_1')">
                             <div class="template-preview">📱</div>
                             <p>Stories - Modelo 1</p>
                         </div>
@@ -773,15 +741,15 @@ HTML_TEMPLATE = """
                         <div class="success-message" id="post-success"></div>
                         <div class="error-message" id="post-error"></div>
 
-                        <button class="btn btn-primary" onclick="generatePost()">🎨 Gerar Post</button>
+                        <button class="btn btn-primary" onclick="generatePost()" id="generate-button">🎨 Gerar Post</button>
                     </div>
                     <div>
                         <div class="preview-area">
                             <div class="preview-placeholder" id="post-preview">
-                                Pré-visualização do post aparecerá aqui
+                                Pré-visualização aparecerá aqui
                             </div>
                         </div>
-                        <button class="btn btn-success" onclick="downloadFile(\'post\')">📥 Download Post</button>
+                        <button class="btn btn-success" onclick="downloadFile(\'post\')" id="download-button">📥 Download</button>
                         <a href="#" id="open-post-image" class="btn btn-secondary" style="margin-left: 10px; display: none;" target="_blank">🖼️ Abrir Imagem</a>                   </div>
                 </div>
             </div>
@@ -911,9 +879,9 @@ HTML_TEMPLATE = """
 
     <script>
         // Estado global da aplicação
-        let currentTab = 'marca-dagua';
+        let currentTab = 'gerar-posts';
         let selectedFormat = 'reels';
-        let selectedTemplate = 'stories_1';
+        let selectedTemplate = 'watermark';
         let uploadedFiles = {};
         let uploadedDataURLs = {};
         let generatedContent = {};
@@ -985,6 +953,10 @@ HTML_TEMPLATE = """
                     }
                 });
             });
+            
+            // Inicializar campos baseado no template padrão
+            updateFieldsForTemplate(selectedTemplate);
+            updateButtonText(selectedTemplate);
         });
 
         // Função para enviar para API
@@ -1086,6 +1058,23 @@ HTML_TEMPLATE = """
             
             // Mostrar/ocultar campos baseado no tipo de template
             updateFieldsForTemplate(templateKey);
+            
+            // Atualizar texto do botão
+            updateButtonText(templateKey);
+        }
+        
+        // Função para atualizar texto do botão
+        function updateButtonText(templateKey) {
+            const generateButton = document.getElementById('generate-button');
+            const downloadButton = document.getElementById('download-button');
+            
+            if (templateKey === 'watermark') {
+                generateButton.textContent = '🏷️ Aplicar Marca d\'Água';
+                downloadButton.textContent = '📥 Download Marca d\'Água';
+            } else {
+                generateButton.textContent = '🎨 Gerar Post';
+                downloadButton.textContent = '📥 Download Post';
+            }
         }
         
         // Função para atualizar campos baseado no template
@@ -1097,17 +1086,25 @@ HTML_TEMPLATE = """
             if (templateKey.includes('feed')) {
                 assuntoGroup.style.display = 'block';
                 creditosGroup.style.display = 'block';
+            } else if (templateKey === 'watermark') {
+                // Template de watermark não precisa de título, assunto ou créditos
+                assuntoGroup.style.display = 'none';
+                creditosGroup.style.display = 'none';
+                document.getElementById('titulo').required = false;
             } else {
                 // Templates de Story e Reels não precisam desses campos
                 assuntoGroup.style.display = 'none';
                 creditosGroup.style.display = 'none';
+                document.getElementById('titulo').required = true;
             }
         }
 
         // Função para gerar post
         async function generatePost() {
             const titulo = document.getElementById('titulo').value;
-            if (!titulo) {
+            
+            // Para template de watermark, título não é obrigatório
+            if (selectedTemplate !== 'watermark' && !titulo) {
                 showError('O título é obrigatório.', 'post');
                 return;
             }
@@ -1135,7 +1132,7 @@ HTML_TEMPLATE = """
                 fileName: uploadedFiles.post.name,
                 format: selectedFormat,
                 template: selectedTemplate,
-                title: titulo,
+                title: titulo || 'N/A',
                 subject: selectedFormat === 'feed' ? document.getElementById('assunto').value : 'N/A',
                 credits: selectedFormat === 'feed' ? document.getElementById('creditos').value : 'N/A'
             });
@@ -1146,15 +1143,18 @@ HTML_TEMPLATE = """
                     generatedImageUrls.post = apiResult.imageUrl;
                     const preview = document.getElementById('post-preview');
                     preview.innerHTML = `<img src="${apiResult.imageUrl}" style="max-width: 100%; max-height: 300px; border-radius: 10px;">`;
-                    showSuccess('Post gerado com sucesso!', 'post');
+                    const message = selectedTemplate === 'watermark' ? 'Marca d\'água aplicada com sucesso!' : 'Post gerado com sucesso!';
+                    showSuccess(message, 'post');
                     document.getElementById('open-post-image').href = apiResult.imageUrl;
                     document.getElementById('open-post-image').style.display = 'inline-block';
                 } else {
-                    showSuccess('Post processado com sucesso!', 'post');
+                    const message = selectedTemplate === 'watermark' ? 'Marca d\'água processada com sucesso!' : 'Post processado com sucesso!';
+                    showSuccess(message, 'post');
                 }
                 generatedContent.post = true;
             } else {
-                showError('Erro ao gerar post.', 'post');
+                const message = selectedTemplate === 'watermark' ? 'Erro ao aplicar marca d\'água.' : 'Erro ao gerar post.';
+                showError(message, 'post');
             }
         }
 
@@ -1609,24 +1609,28 @@ def process_generate_post(payload, request):
                 layers = {
                     "imgprincipal": {
                         "image": public_file_url
-                    },
-                    "titulocopy": {
-                        "text": title
                     }
                 }
                 
                 # Adicionar layers específicos baseado no tipo de template
-                if template_type == 'feed':
-                    # Templates de Feed: credit, creditfoto, assuntext
+                if template_type == 'watermark':
+                    # Template de watermark: apenas imgprincipal (a logo já está no template)
+                    pass
+                elif template_type == 'feed':
+                    # Templates de Feed: credit, creditfoto, assuntext, titulocopy
+                    layers["titulocopy"] = {"text": title}
                     if subject:
                         layers["assuntext"] = {"text": subject}
                     if credits:
                         layers["creditfoto"] = {"text": f"FOTO: {credits}"}
                     layers["credit"] = {"text": "Créditos gerais"}
                 elif template_type == 'story':
-                    # Templates de Story: imgfundo (fundo vermelho texturizado)
+                    # Templates de Story: imgfundo (fundo vermelho texturizado), titulocopy
+                    layers["titulocopy"] = {"text": title}
                     layers["imgfundo"] = {"image": "https://via.placeholder.com/1080x1920/FF0000/FFFFFF?text=FUNDO+VERMELHO"}
-                # Templates de Reels: mantém apenas imgprincipal e titulocopy
+                else:
+                    # Templates de Reels: titulocopy
+                    layers["titulocopy"] = {"text": title}
                 
                 # Modificações baseadas no template selecionado
                 modifications = {
