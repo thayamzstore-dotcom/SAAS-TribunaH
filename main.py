@@ -1459,8 +1459,27 @@ def process_watermark(payload, request):
                 file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
                 file.save(file_path)
                 
-                # URL pública do arquivo
-                public_file_url = f"{request.url_root}uploads/{unique_filename}"
+                # URL pública do arquivo - usando URL absoluta
+                # Obter o host da requisição
+                host = request.host
+                scheme = 'https' if request.is_secure else 'http'
+                
+                # Fallback para localhost se host não for detectado
+                if not host or host == '0.0.0.0':
+                    host = 'localhost:5000'
+                
+                public_file_url = f"{scheme}://{host}/uploads/{unique_filename}"
+                
+                print(f"DEBUG - URL da imagem gerada: {public_file_url}")
+                print(f"DEBUG - Host detectado: {host}, Scheme: {scheme}")
+                
+                # Verificar se o arquivo foi salvo corretamente
+                if not os.path.exists(file_path):
+                    print(f"ERRO - Arquivo não foi salvo: {file_path}")
+                    response_data['message'] = "Erro ao salvar arquivo"
+                    return jsonify(response_data), 500
+                
+                print(f"DEBUG - Arquivo salvo com sucesso: {file_path}")
                 
                 # Configurar layers para o Placid com nomes corretos
                 layers = {
@@ -1546,8 +1565,27 @@ def process_generate_post(payload, request):
                 file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
                 file.save(file_path)
                 
-                # URL pública do arquivo
-                public_file_url = f"{request.url_root}uploads/{unique_filename}"
+                # URL pública do arquivo - usando URL absoluta
+                # Obter o host da requisição
+                host = request.host
+                scheme = 'https' if request.is_secure else 'http'
+                
+                # Fallback para localhost se host não for detectado
+                if not host or host == '0.0.0.0':
+                    host = 'localhost:5000'
+                
+                public_file_url = f"{scheme}://{host}/uploads/{unique_filename}"
+                
+                print(f"DEBUG - URL da imagem gerada: {public_file_url}")
+                print(f"DEBUG - Host detectado: {host}, Scheme: {scheme}")
+                
+                # Verificar se o arquivo foi salvo corretamente
+                if not os.path.exists(file_path):
+                    print(f"ERRO - Arquivo não foi salvo: {file_path}")
+                    response_data['message'] = "Erro ao salvar arquivo"
+                    return jsonify(response_data), 500
+                
+                print(f"DEBUG - Arquivo salvo com sucesso: {file_path}")
                 
                 # Configurar layers baseado no formato e template
                 format_type = payload.get('format', 'reels')
