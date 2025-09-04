@@ -581,13 +581,13 @@ HTML_TEMPLATE = """
 
                 <div class="two-column">
                     <div>
-                        <div class="loading" id="watermark-loading">
-                            <div class="spinner"></div>
-                            <p>Aplicando marca d'água...</p>
-                        </div>
+                <div class="loading" id="watermark-loading">
+                    <div class="spinner"></div>
+                    <p>Aplicando marca d'água...</p>
+                </div>
 
-                        <div class="success-message" id="watermark-success"></div>
-                        <div class="error-message" id="watermark-error"></div>
+                <div class="success-message" id="watermark-success"></div>
+                <div class="error-message" id="watermark-error"></div>
 
                         <button class="btn btn-primary" onclick="applyWatermark()">🎨 Aplicar Marca d'Água</button>
                     </div>
@@ -711,41 +711,41 @@ HTML_TEMPLATE = """
                 <div class="two-column">
                     <!-- Coluna 1: Gerador de Títulos -->
                     <div>
-                        <div class="controls-section">
+                <div class="controls-section">
                             <h3>🎯 Gerador de Títulos Jornalísticos</h3>
-                            <div class="control-group">
+                    <div class="control-group">
                                 <label class="control-label">Descrição da Notícia *</label>
                                 <textarea class="control-input" id="noticia-texto" rows="4" placeholder="Cole aqui a descrição da notícia para gerar título impactante..."></textarea>
-                            </div>
+                    </div>
 
-                            <div class="loading" id="title-loading">
-                                <div class="spinner"></div>
+                    <div class="loading" id="title-loading">
+                        <div class="spinner"></div>
                                 <p>Analisando conteúdo e gerando título impactante...</p>
-                            </div>
+                    </div>
 
-                            <div class="success-message" id="title-success"></div>
-                            <div class="error-message" id="title-error"></div>
+                    <div class="success-message" id="title-success"></div>
+                    <div class="error-message" id="title-error"></div>
 
                             <button class="btn btn-primary" onclick="generateTitle()">🤖 Gerar Título Impactante</button>
-                        </div>
+                </div>
 
-                        <div class="ai-suggestions" id="title-suggestions" style="display: none;">
+                <div class="ai-suggestions" id="title-suggestions" style="display: none;">
                             <h4>Título Sugerido pela IA</h4>
-                            <div class="suggestion-item" id="suggested-title">
-                                <p><strong>Título sugerido aparecerá aqui</strong></p>
-                            </div>
-                            <div style="margin-top: 15px;">
-                                <button class="btn btn-success" onclick="acceptTitle()">✅ Aceitar Sugestão</button>
-                                <button class="btn btn-secondary" onclick="rejectTitle()" style="margin-left: 10px;">❌ Recusar</button>
-                            </div>
-                        </div>
+                    <div class="suggestion-item" id="suggested-title">
+                        <p><strong>Título sugerido aparecerá aqui</strong></p>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <button class="btn btn-success" onclick="acceptTitle()">✅ Aceitar Sugestão</button>
+                        <button class="btn btn-secondary" onclick="rejectTitle()" style="margin-left: 10px;">❌ Recusar</button>
+                    </div>
+                </div>
 
-                        <div class="controls-section" id="manual-title" style="display: none;">
-                            <div class="control-group">
-                                <label class="control-label">Digite o título manualmente</label>
-                                <input type="text" class="control-input" id="manual-title-input" placeholder="Digite seu título personalizado">
-                            </div>
-                            <button class="btn btn-primary" onclick="saveManualTitle()">💾 Salvar Título</button>
+                <div class="controls-section" id="manual-title" style="display: none;">
+                    <div class="control-group">
+                        <label class="control-label">Digite o título manualmente</label>
+                        <input type="text" class="control-input" id="manual-title-input" placeholder="Digite seu título personalizado">
+                    </div>
+                    <button class="btn btn-primary" onclick="saveManualTitle()">💾 Salvar Título</button>
                         </div>
                     </div>
 
@@ -1346,15 +1346,13 @@ def process_watermark(payload, request):
                 file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
                 file.save(file_path)
                 
-                # URL pública do arquivo
-                public_file_url = f"{request.url_root}uploads/{unique_filename}"
+                # URL pública do arquivo - garantir que seja acessível
+                base_url = request.url_root.rstrip('/')
+                public_file_url = f"{base_url}/uploads/{unique_filename}"
+                print(f"URL pública do arquivo: {public_file_url}")
                 
-                # Configurar layers baseado no formato e template
-                format_type = 'watermark'  # Fixo para marca d'água
+                # Configurar template de marca d'água
                 template_key = 'watermark'  # Template de marca d'água
-                title = 'Marca d\'Água'  # Título fixo
-                subject = ''  # Não necessário para marca d'água
-                credits = ''  # Não necessário para marca d'água
                 
                 # Verificar se o template existe
                 if template_key not in PLACID_TEMPLATES:
@@ -1365,22 +1363,16 @@ def process_watermark(payload, request):
                 template_type = template_info.get('type', 'watermark')
                 template_dimensions = template_info.get('dimensions', {'width': 1200, 'height': 1200})
                 
-                # Configurar layers baseado no tipo de template
+                # Configurar layers baseado no template de marca d'água
+                # Apenas as duas layers que o template espera
                 layers = {
                     "imgprincipal": {
                         "image": public_file_url
                     },
-                    "titulocopy": {
-                        "text": title
+                    "logomarca": {
+                        "image": "https://via.placeholder.com/100x50/000000/FFFFFF?text=LOGO"
                     }
                 }
-                
-                # Adicionar layers específicos baseado no tipo de template
-                if template_type == 'watermark':
-                    # Template de marca d'água: adicionar logo
-                    layers["logomarca"] = {
-                        "image": "https://via.placeholder.com/100x50/000000/FFFFFF?text=LOGO"  # Substitua pela URL do seu logo
-                    }
                 
                 # Modificações baseadas no template selecionado
                 modifications = {
@@ -1394,6 +1386,9 @@ def process_watermark(payload, request):
                 
                 # Criar imagem no Placid
                 print(f"Criando marca d'água no Placid com template: {template_uuid} ({PLACID_TEMPLATES[template_key]['name']})")
+                print(f"Layers enviados: {layers}")
+                print(f"Modifications enviadas: {modifications}")
+                
                 image_result = create_placid_image(
                     template_uuid=template_uuid,
                     layers=layers,
@@ -1403,6 +1398,7 @@ def process_watermark(payload, request):
                 if image_result:
                     image_id = image_result.get('id')
                     print(f"Marca d'água criada com ID: {image_id}")
+                    print(f"Resposta completa do Placid: {image_result}")
                     
                     # Aguardar conclusão
                     final_image = poll_placid_image_status(image_id)
@@ -1413,8 +1409,10 @@ def process_watermark(payload, request):
                         print(f"Marca d'água finalizada: {final_image['image_url']}")
                     else:
                         response_data['message'] = "Erro ao processar marca d'água no Placid"
+                        print(f"Erro no polling: {final_image}")
                 else:
                     response_data['message'] = "Erro ao criar marca d'água no Placid"
+                    print("Falha na criação da marca d'água no Placid")
                     
             except Exception as e:
                 print(f"Erro ao processar marca d'água: {e}")
