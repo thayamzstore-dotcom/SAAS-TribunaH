@@ -7,6 +7,7 @@ import io
 from datetime import datetime
 import os
 import re
+from PIL import Image, ImageDraw, ImageFont
 
 app = Flask(__name__)
 CORS(app)
@@ -184,6 +185,60 @@ def poll_placid_image_status(image_id, max_attempts=30, delay=2):
     
     print(f"Timeout: Imagem não foi criada em {max_attempts * delay} segundos")
     return None
+
+def create_local_watermark(image_path, output_path):
+    """
+    Cria uma marca d'água local usando Pillow como fallback
+    """
+    try:
+        # Abrir a imagem original
+        with Image.open(image_path) as img:
+            # Converter para RGBA se necessário
+            if img.mode != 'RGBA':
+                img = img.convert('RGBA')
+            
+            # Criar uma camada para a marca d'água
+            watermark = Image.new('RGBA', img.size, (0, 0, 0, 0))
+            draw = ImageDraw.Draw(watermark)
+            
+            # Configurar a fonte (usar fonte padrão se disponível)
+            try:
+                font = ImageFont.truetype("arial.ttf", 40)
+            except:
+                font = ImageFont.load_default()
+            
+            # Texto da marca d'água
+            text = "TRIBUNA HOJE"
+            
+            # Calcular posição (canto inferior direito)
+            bbox = draw.textbbox((0, 0), text, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+            
+            x = img.width - text_width - 20
+            y = img.height - text_height - 20
+            
+            # Desenhar fundo semi-transparente
+            draw.rectangle([x-10, y-10, x+text_width+10, y+text_height+10], 
+                         fill=(0, 0, 0, 128))
+            
+            # Desenhar o texto
+            draw.text((x, y), text, fill=(255, 255, 255, 255), font=font)
+            
+            # Combinar as imagens
+            watermarked = Image.alpha_composite(img, watermark)
+            
+            # Converter de volta para RGB se necessário
+            if watermarked.mode == 'RGBA':
+                watermarked = watermarked.convert('RGB')
+            
+            # Salvar a imagem
+            watermarked.save(output_path, 'JPEG', quality=95)
+            
+            return True
+    except Exception as e:
+        print(f"Erro ao criar marca d'água local: {e}")
+        return False
 
 # Template HTML completo
 HTML_TEMPLATE = """
@@ -1383,15 +1438,30 @@ def process_watermark(payload, request):
                 template_dimensions = template_info.get('dimensions', {'width': 1200, 'height': 1200})
                 
                 # Configurar layers baseado no template de marca d'água
-                # Apenas as duas layers que o template espera
+                # Usar uma URL de logo real ou criar um logo simples
+                logo_url = "https://via.placeholder.com/200x100/FF0000/FFFFFF?text=TRIBUNA+HOJE"
+                
+                # Tentar diferentes estruturas de layers baseado no template
                 layers = {
                     "imgprincipal": {
                         "image": public_file_url
                     },
                     "logomarca": {
-                        "image": "https://via.placeholder.com/100x50/000000/FFFFFF?text=LOGO"
+                        "image": logo_url
                     }
                 }
+                
+                # Se o template não funcionar, tentar estrutura alternativa
+                if template_uuid == 'x9jxylt4vx2x0':
+                    # Estrutura específica para o template de marca d'água
+                    layers = {
+                        "background": {
+                            "image": public_file_url
+                        },
+                        "watermark": {
+                            "image": logo_url
+                        }
+                    }
                 
                 # Modificações baseadas no template selecionado
                 modifications = {
@@ -1403,10 +1473,21 @@ def process_watermark(payload, request):
                     "color_mode": "rgb"  # Cor RGB
                 }
                 
+                # Verificar conectividade com o Placid
+                try:
+                    test_response = requests.get('https://api.placid.app/api/rest/images', 
+                                               headers={'Authorization': f'Bearer {PLACID_API_TOKEN}'}, 
+                                               timeout=10)
+                    print(f"Teste de conectividade com Placid: {test_response.status_code}")
+                except Exception as e:
+                    print(f"Erro de conectividade com Placid: {e}")
+                
                 # Criar imagem no Placid
                 print(f"Criando marca d'água no Placid com template: {template_uuid} ({PLACID_TEMPLATES[template_key]['name']})")
                 print(f"Layers enviados: {layers}")
                 print(f"Modifications enviadas: {modifications}")
+                print(f"URL da imagem principal: {public_file_url}")
+                print(f"URL do logo: {logo_url}")
                 
                 image_result = create_placid_image(
                     template_uuid=template_uuid,
@@ -1429,13 +1510,28 @@ def process_watermark(payload, request):
                     else:
                         response_data['message'] = "Erro ao processar marca d'água no Placid"
                         print(f"Erro no polling: {final_image}")
+                        # Fallback: retornar a imagem original
+                        response_data['success'] = True
+                        response_data['imageUrl'] = public_file_url
+                        response_data['message'] = "Arquivo processado (marca d'água temporariamente indisponível)"
                 else:
-                    # Fallback: retornar a imagem original como sucesso temporário
-                    print("Falha na criação da marca d'água no Placid - usando fallback")
-                    response_data['success'] = True
-                    response_data['imageUrl'] = public_file_url
-                    response_data['message'] = "Arquivo processado (marca d'água temporariamente indisponível)"
-                    print(f"Fallback: retornando imagem original: {public_file_url}")
+                    # Fallback: criar marca d'água local
+                    print("Falha na criação da marca d'água no Placid - usando fallback local")
+                    watermark_filename = f"watermark_local_{timestamp}.jpg"
+                    watermark_path = os.path.join(UPLOAD_FOLDER, watermark_filename)
+                    
+                    if create_local_watermark(file_path, watermark_path):
+                        watermark_url = f"{base_url}/uploads/{watermark_filename}"
+                        response_data['success'] = True
+                        response_data['imageUrl'] = watermark_url
+                        response_data['message'] = "Marca d'água aplicada com sucesso (método local)!"
+                        print(f"Fallback local: marca d'água criada em {watermark_url}")
+                    else:
+                        # Último recurso: retornar a imagem original
+                        response_data['success'] = True
+                        response_data['imageUrl'] = public_file_url
+                        response_data['message'] = "Arquivo processado (marca d'água temporariamente indisponível)"
+                        print(f"Fallback: retornando imagem original: {public_file_url}")
                     
             except Exception as e:
                 print(f"Erro ao processar marca d'água: {e}")
