@@ -1218,7 +1218,7 @@ def process_request():
         return jsonify(response_data), 400
 
 def process_watermark(payload, request):
-    """Processa aplicação de marca d'água usando Placid"""
+    """Processa aplicação de marca d'água usando Placid - usando a mesma lógica dos outros templates"""
     response_data = {"success": False}
     
     # Verificar se há arquivo
@@ -1239,24 +1239,32 @@ def process_watermark(payload, request):
                 # URL pública do arquivo
                 public_file_url = f"{request.url_root}uploads/{unique_filename}"
                 
-                # Configurar layers para o Placid - apenas imgprincipal conforme solicitado
+                # Usar a mesma lógica dos outros templates
+                template_key = 'watermark'
+                template_info = PLACID_TEMPLATES[template_key]
+                template_uuid = template_info['uuid']
+                template_type = template_info.get('type', 'watermark')
+                template_dimensions = template_info.get('dimensions', {'width': 1080, 'height': 1080})
+                
+                # Configurar layers - apenas imgprincipal conforme solicitado
                 layers = {
                     "imgprincipal": {
                         "image": public_file_url
                     }
                 }
                 
-                # Modificações baseadas nos parâmetros
-                position = payload.get('position', 'bottom-right')
-                transparency = int(payload.get('transparency', 50))
-                
+                # Modificações baseadas no template selecionado (mesma lógica dos outros templates)
                 modifications = {
-                    "filename": f"watermarked_{timestamp}.png"
+                    "filename": f"watermark_{timestamp}.png",
+                    "width": template_dimensions['width'],
+                    "height": template_dimensions['height'],
+                    "image_format": "auto",  # jpg/png automático
+                    "dpi": 72,  # DPI da imagem
+                    "color_mode": "rgb"  # Cor RGB
                 }
                 
-                # Criar imagem no Placid
-                template_uuid = PLACID_TEMPLATES['watermark']['uuid']
-                print(f"Criando imagem no Placid com template: {template_uuid}")
+                # Criar imagem no Placid (mesma lógica dos outros templates)
+                print(f"Criando watermark no Placid com template: {template_uuid} ({PLACID_TEMPLATES[template_key]['name']})")
                 image_result = create_placid_image(
                     template_uuid=template_uuid,
                     layers=layers,
@@ -1265,22 +1273,22 @@ def process_watermark(payload, request):
                 
                 if image_result:
                     image_id = image_result.get('id')
-                    print(f"Imagem criada com ID: {image_id}")
+                    print(f"Watermark criado com ID: {image_id}")
                     
-                    # Aguardar conclusão
+                    # Aguardar conclusão (mesma lógica dos outros templates)
                     final_image = poll_placid_image_status(image_id)
                     if final_image and final_image.get('image_url'):
                         response_data['success'] = True
                         response_data['imageUrl'] = final_image['image_url']
                         response_data['message'] = "Marca d'água aplicada com sucesso!"
-                        print(f"Imagem finalizada: {final_image['image_url']}")
+                        print(f"Watermark finalizado: {final_image['image_url']}")
                     else:
-                        response_data['message'] = "Erro ao processar imagem no Placid"
+                        response_data['message'] = "Erro ao processar watermark no Placid"
                 else:
-                    response_data['message'] = "Erro ao criar imagem no Placid"
+                    response_data['message'] = "Erro ao criar watermark no Placid"
                     
             except Exception as e:
-                print(f"Erro ao processar marca d'água: {e}")
+                print(f"Erro ao processar watermark: {e}")
                 response_data['message'] = f"Erro ao processar arquivo: {e}"
                 return jsonify(response_data), 500
         else:
