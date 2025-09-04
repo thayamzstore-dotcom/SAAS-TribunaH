@@ -102,11 +102,41 @@ def create_placid_image(template_uuid, layers, modifications=None, webhook_succe
         payload['webhook_success'] = webhook_success
     
     try:
+        print(f"DEBUG - Enviando para Placid: {payload}")
         response = requests.post(PLACID_API_URL, json=payload, headers=headers)
+        print(f"DEBUG - Resposta do Placid: {response.status_code}")
+        print(f"DEBUG - Conteúdo da resposta: {response.text}")
+        
+        if response.status_code != 200:
+            print(f"Erro HTTP {response.status_code}: {response.text}")
+            return None
+            
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
         print(f"Erro ao criar imagem no Placid: {e}")
+        return None
+
+def get_placid_template(template_uuid):
+    """
+    Obtém informações de um template do Placid
+    """
+    headers = {
+        'Authorization': f'Bearer {PLACID_API_TOKEN}'
+    }
+    
+    try:
+        response = requests.get(f'https://api.placid.app/api/rest/templates/{template_uuid}', headers=headers)
+        print(f"DEBUG - Resposta do template: {response.status_code}")
+        if response.status_code == 200:
+            template_info = response.json()
+            print(f"DEBUG - Template info: {template_info}")
+            return template_info
+        else:
+            print(f"Erro ao obter template: {response.text}")
+            return None
+    except requests.exceptions.RequestException as e:
+        print(f"Erro ao obter template do Placid: {e}")
         return None
 
 def get_placid_image(image_id):
@@ -1047,8 +1077,8 @@ HTML_TEMPLATE = """
                 format: selectedFormat,
                 template: selectedTemplate,
                 title: titulo,
-                subject: selectedFormat === 'feed' ? document.getElementById('assunto').value : 'N/A',
-                credits: selectedFormat === 'feed' ? document.getElementById('creditos').value : 'N/A'
+                subject: selectedFormat === 'feed' ? document.getElementById('assunto').value : '',
+                credits: selectedFormat === 'feed' ? document.getElementById('creditos').value : ''
             });
 
             hideLoading('post');
@@ -1432,13 +1462,23 @@ def process_watermark(payload, request):
                 # URL pública do arquivo
                 public_file_url = f"{request.url_root}uploads/{unique_filename}"
                 
-                # Configurar layers para o Placid
+                # Configurar layers para o Placid - tentando diferentes nomes de layers
                 layers = {
-                    "imgprincipal": {
+                    "image": {
                         "image": public_file_url
                     },
-                    "logomarca": {
-                        "image": "https://via.placeholder.com/100x50/000000/FFFFFF?text=LOGO"  # Substitua pela URL do seu logo
+                    "logo": {
+                        "image": "https://via.placeholder.com/200x100/FF0000/FFFFFF?text=TRIBUNA+HOJE"
+                    }
+                }
+                
+                # Tentar também com nomes alternativos
+                layers_alt = {
+                    "background": {
+                        "image": public_file_url
+                    },
+                    "watermark": {
+                        "image": "https://via.placeholder.com/200x100/FF0000/FFFFFF?text=TRIBUNA+HOJE"
                     }
                 }
                 
@@ -1450,14 +1490,45 @@ def process_watermark(payload, request):
                     "filename": f"watermarked_{timestamp}.png"
                 }
                 
+                print(f"DEBUG - Layers principais: {layers}")
+                print(f"DEBUG - Layers alternativos: {layers_alt}")
+                
                 # Criar imagem no Placid
                 template_uuid = PLACID_TEMPLATES['watermark']['uuid']
                 print(f"Criando imagem no Placid com template: {template_uuid}")
+                
+                # Primeiro, obter informações do template para descobrir os layers corretos
+                template_info = get_placid_template(template_uuid)
+                
+                # Tentar primeiro com layers principais
                 image_result = create_placid_image(
                     template_uuid=template_uuid,
                     layers=layers,
                     modifications=modifications
                 )
+                
+                # Se falhar, tentar com layers alternativos
+                if not image_result:
+                    print("Tentando com layers alternativos...")
+                    image_result = create_placid_image(
+                        template_uuid=template_uuid,
+                        layers=layers_alt,
+                        modifications=modifications
+                    )
+                
+                # Se ainda falhar, tentar apenas com a imagem principal
+                if not image_result:
+                    print("Tentando apenas com imagem principal...")
+                    layers_simple = {
+                        "image": {
+                            "image": public_file_url
+                        }
+                    }
+                    image_result = create_placid_image(
+                        template_uuid=template_uuid,
+                        layers=layers_simple,
+                        modifications=modifications
+                    )
                 
                 if image_result:
                     image_id = image_result.get('id')
@@ -1472,8 +1543,10 @@ def process_watermark(payload, request):
                         print(f"Imagem finalizada: {final_image['image_url']}")
                     else:
                         response_data['message'] = "Erro ao processar imagem no Placid"
+                        print(f"Erro no processamento: {final_image}")
                 else:
-                    response_data['message'] = "Erro ao criar imagem no Placid"
+                    response_data['message'] = "Erro ao criar imagem no Placid - template pode ter layers diferentes"
+                    print("Falha em todas as tentativas de criação da imagem")
                     
             except Exception as e:
                 print(f"Erro ao processar marca d'água: {e}")
@@ -1514,8 +1587,11 @@ def process_generate_post(payload, request):
                 format_type = payload.get('format', 'reels')
                 template_key = payload.get('template', 'feed_1_red')
                 title = payload.get('title', '')
-                subject = payload.get('subject', '')
-                credits = payload.get('credits', '')
+                subject = payload.get('subject', '').strip()
+                credits = payload.get('credits', '').strip()
+                
+                print(f"DEBUG - Template: {template_key}, Format: {format_type}")
+                print(f"DEBUG - Title: '{title}', Subject: '{subject}', Credits: '{credits}'")
                 
                 # Verificar se o template existe
                 if template_key not in PLACID_TEMPLATES:
@@ -1539,11 +1615,17 @@ def process_generate_post(payload, request):
                 # Adicionar layers específicos baseado no tipo de template
                 if template_type == 'feed':
                     # Templates de Feed: credit, creditfoto, assuntext
-                    if subject:
+                    if subject and subject.strip():
                         layers["assuntext"] = {"text": subject}
-                    if credits:
+                    else:
+                        layers["assuntext"] = {"text": "Assunto não informado"}
+                    
+                    if credits and credits.strip():
                         layers["creditfoto"] = {"text": f"FOTO: {credits}"}
-                    layers["credit"] = {"text": "Créditos gerais"}
+                    else:
+                        layers["creditfoto"] = {"text": "FOTO: Não informado"}
+                    
+                    layers["credit"] = {"text": "Tribuna Hoje"}
                 elif template_type == 'story':
                     # Templates de Story: imgfundo (fundo vermelho texturizado)
                     layers["imgfundo"] = {"image": "https://via.placeholder.com/1080x1920/FF0000/FFFFFF?text=FUNDO+VERMELHO"}
@@ -1558,6 +1640,8 @@ def process_generate_post(payload, request):
                     "dpi": 72,  # DPI da imagem
                     "color_mode": "rgb"  # Cor RGB
                 }
+                
+                print(f"DEBUG - Layers enviados: {layers}")
                 
                 # Criar imagem no Placid
                 print(f"Criando post no Placid com template: {template_uuid} ({PLACID_TEMPLATES[template_key]['name']})")
