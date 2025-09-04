@@ -7,12 +7,6 @@ import io
 from datetime import datetime
 import os
 import re
-try:
-    from PIL import Image, ImageDraw, ImageFont
-    PIL_AVAILABLE = True
-except ImportError:
-    PIL_AVAILABLE = False
-    print("PIL/Pillow não disponível - funcionalidade de marca d'água local será limitada")
 
 app = Flask(__name__)
 CORS(app)
@@ -27,8 +21,7 @@ PLACID_TEMPLATES = {
         'uuid': 'x9jxylt4vx2x0',
         'name': 'Marca d\'Água',
         'description': 'Template para aplicar marca d\'água',
-        'type': 'watermark',
-        'dimensions': {'width': 1200, 'height': 1200}
+        'type': 'watermark'
     },
     'stories_1': {
         'uuid': 'g7wi0hogpxx5c',
@@ -109,30 +102,11 @@ def create_placid_image(template_uuid, layers, modifications=None, webhook_succe
         payload['webhook_success'] = webhook_success
     
     try:
-        print(f"Enviando requisição para Placid: {PLACID_API_URL}")
-        print(f"Payload: {payload}")
-        
-        response = requests.post(PLACID_API_URL, json=payload, headers=headers, timeout=30)
-        print(f"Status da resposta: {response.status_code}")
-        print(f"Resposta: {response.text}")
-        
+        response = requests.post(PLACID_API_URL, json=payload, headers=headers)
         response.raise_for_status()
         return response.json()
-    except requests.exceptions.Timeout as e:
-        print(f"Timeout ao criar imagem no Placid: {e}")
-        return None
-    except requests.exceptions.ConnectionError as e:
-        print(f"Erro de conexão ao criar imagem no Placid: {e}")
-        return None
-    except requests.exceptions.HTTPError as e:
-        print(f"Erro HTTP ao criar imagem no Placid: {e}")
-        print(f"Resposta: {response.text if 'response' in locals() else 'N/A'}")
-        return None
     except requests.exceptions.RequestException as e:
         print(f"Erro ao criar imagem no Placid: {e}")
-        return None
-    except Exception as e:
-        print(f"Erro inesperado ao criar imagem no Placid: {e}")
         return None
 
 def get_placid_image(image_id):
@@ -190,64 +164,6 @@ def poll_placid_image_status(image_id, max_attempts=30, delay=2):
     
     print(f"Timeout: Imagem não foi criada em {max_attempts * delay} segundos")
     return None
-
-def create_local_watermark(image_path, output_path):
-    """
-    Cria uma marca d'água local usando Pillow como fallback
-    """
-    if not PIL_AVAILABLE:
-        print("PIL não disponível - não é possível criar marca d'água local")
-        return False
-        
-    try:
-        # Abrir a imagem original
-        with Image.open(image_path) as img:
-            # Converter para RGBA se necessário
-            if img.mode != 'RGBA':
-                img = img.convert('RGBA')
-            
-            # Criar uma camada para a marca d'água
-            watermark = Image.new('RGBA', img.size, (0, 0, 0, 0))
-            draw = ImageDraw.Draw(watermark)
-            
-            # Configurar a fonte (usar fonte padrão se disponível)
-            try:
-                font = ImageFont.truetype("arial.ttf", 40)
-            except:
-                font = ImageFont.load_default()
-            
-            # Texto da marca d'água
-            text = "TRIBUNA HOJE"
-            
-            # Calcular posição (canto inferior direito)
-            bbox = draw.textbbox((0, 0), text, font=font)
-            text_width = bbox[2] - bbox[0]
-            text_height = bbox[3] - bbox[1]
-            
-            x = img.width - text_width - 20
-            y = img.height - text_height - 20
-            
-            # Desenhar fundo semi-transparente
-            draw.rectangle([x-10, y-10, x+text_width+10, y+text_height+10], 
-                         fill=(0, 0, 0, 128))
-            
-            # Desenhar o texto
-            draw.text((x, y), text, fill=(255, 255, 255, 255), font=font)
-            
-            # Combinar as imagens
-            watermarked = Image.alpha_composite(img, watermark)
-            
-            # Converter de volta para RGB se necessário
-            if watermarked.mode == 'RGBA':
-                watermarked = watermarked.convert('RGB')
-            
-            # Salvar a imagem
-            watermarked.save(output_path, 'JPEG', quality=95)
-            
-            return True
-    except Exception as e:
-        print(f"Erro ao criar marca d'água local: {e}")
-        return False
 
 # Template HTML completo
 HTML_TEMPLATE = """
@@ -650,6 +566,7 @@ HTML_TEMPLATE = """
                 <button class="tab-button" onclick="switchTab('legendas')">✍️ Legendas IA</button>
             </div>
 
+
             <!-- Aba Gerar Posts -->
             <div id="gerar-posts" class="tab-content active">
                 <h2>Gerar Posts para Instagram</h2>
@@ -664,6 +581,10 @@ HTML_TEMPLATE = """
                 <div class="controls-section">
                     <h3>Selecione o Formato</h3>
                     <div class="format-selector">
+                        <div class="format-option" onclick="selectFormat('watermark')">
+                            <h4>🏷️ Marca d'Água</h4>
+                            <p>Aplicar marca d'água</p>
+                        </div>
                         <div class="format-option selected" onclick="selectFormat('reels')">
                             <h4>📹 Reels</h4>
                             <p>Vídeos verticais</p>
@@ -680,11 +601,11 @@ HTML_TEMPLATE = """
 
                     <h3>Templates Disponíveis</h3>
                     <div class="template-grid" id="template-grid">
-                        <div class="template-item selected" onclick="selectTemplate('watermark')">
+                        <div class="template-item" onclick="selectTemplate('watermark')">
                             <div class="template-preview">🏷️</div>
                             <p>Marca d'Água</p>
                         </div>
-                        <div class="template-item" onclick="selectTemplate('stories_1')">
+                        <div class="template-item selected" onclick="selectTemplate('stories_1')">
                             <div class="template-preview">📱</div>
                             <p>Stories - Modelo 1</p>
                         </div>
@@ -741,47 +662,42 @@ HTML_TEMPLATE = """
                         <div class="success-message" id="post-success"></div>
                         <div class="error-message" id="post-error"></div>
 
-                        <button class="btn btn-primary" onclick="generatePost()" id="generate-button">🎨 Gerar Post</button>
+                        <button class="btn btn-primary" onclick="generatePost()">🎨 Gerar Post</button>
                     </div>
                     <div>
                         <div class="preview-area">
                             <div class="preview-placeholder" id="post-preview">
-                                Pré-visualização aparecerá aqui
+                                Pré-visualização do post aparecerá aqui
                             </div>
                         </div>
-                        <button class="btn btn-success" onclick="downloadFile(\'post\')" id="download-button">📥 Download</button>
+                        <button class="btn btn-success" onclick="downloadFile(\'post\')">📥 Download Post</button>
                         <a href="#" id="open-post-image" class="btn btn-secondary" style="margin-left: 10px; display: none;" target="_blank">🖼️ Abrir Imagem</a>                   </div>
                 </div>
             </div>
 
             <!-- Aba Notícia e Título -->
             <div id="noticia-titulo" class="tab-content">
-                <h2>Gerador Avançado de Títulos e Reescrita de Notícias</h2>
-                <p style="color: #6c757d; margin-bottom: 30px;">Transforme descrições de notícias em títulos impactantes e reescreva notícias no estilo Tribuna Hoje.</p>
+                <h2>Gerar Título com IA</h2>
                 
-                <div class="two-column">
-                    <!-- Coluna 1: Gerador de Títulos -->
-                    <div>
                 <div class="controls-section">
-                            <h3>🎯 Gerador de Títulos Jornalísticos</h3>
                     <div class="control-group">
-                                <label class="control-label">Descrição da Notícia *</label>
-                                <textarea class="control-input" id="noticia-texto" rows="4" placeholder="Cole aqui a descrição da notícia para gerar título impactante..."></textarea>
+                        <label class="control-label">Cole o texto da notícia ou link</label>
+                        <textarea class="control-input" id="noticia-texto" rows="6" placeholder="Cole aqui o texto da notícia ou o link para análise..."></textarea>
                     </div>
 
                     <div class="loading" id="title-loading">
                         <div class="spinner"></div>
-                                <p>Analisando conteúdo e gerando título impactante...</p>
+                        <p>Analisando conteúdo e gerando título...</p>
                     </div>
 
                     <div class="success-message" id="title-success"></div>
                     <div class="error-message" id="title-error"></div>
 
-                            <button class="btn btn-primary" onclick="generateTitle()">🤖 Gerar Título Impactante</button>
+                    <button class="btn btn-primary" onclick="generateTitle()">🤖 Gerar Título</button>
                 </div>
 
                 <div class="ai-suggestions" id="title-suggestions" style="display: none;">
-                            <h4>Título Sugerido pela IA</h4>
+                    <h3>Título Sugerido pela IA</h3>
                     <div class="suggestion-item" id="suggested-title">
                         <p><strong>Título sugerido aparecerá aqui</strong></p>
                     </div>
@@ -797,80 +713,38 @@ HTML_TEMPLATE = """
                         <input type="text" class="control-input" id="manual-title-input" placeholder="Digite seu título personalizado">
                     </div>
                     <button class="btn btn-primary" onclick="saveManualTitle()">💾 Salvar Título</button>
-                        </div>
-                    </div>
-
-                    <!-- Coluna 2: Reescritor de Notícias -->
-                    <div>
-                        <div class="controls-section">
-                            <h3>📰 Reescritor de Notícias - Estilo Tribuna Hoje</h3>
-                            <div class="control-group">
-                                <label class="control-label">Notícia Original *</label>
-                                <textarea class="control-input" id="noticia-reescrever" rows="4" placeholder="Cole aqui a notícia original para reescrever no estilo Tribuna Hoje..."></textarea>
-                            </div>
-
-                            <div class="loading" id="rewrite-loading">
-                                <div class="spinner"></div>
-                                <p>Reescrevendo notícia no estilo Tribuna Hoje...</p>
-                            </div>
-
-                            <div class="success-message" id="rewrite-success"></div>
-                            <div class="error-message" id="rewrite-error"></div>
-
-                            <button class="btn btn-primary" onclick="rewriteNews()">📝 Reescrever Notícia</button>
-                        </div>
-
-                        <div class="ai-suggestions" id="rewrite-suggestions" style="display: none;">
-                            <h4>Notícia Reescrita - Estilo Tribuna Hoje</h4>
-                            <div class="suggestion-item" id="rewritten-news">
-                                <p><strong>Notícia reescrita aparecerá aqui</strong></p>
-                            </div>
-                            <div style="margin-top: 15px;">
-                                <button class="btn btn-success" onclick="acceptRewrite()">✅ Aceitar Versão</button>
-                                <button class="btn btn-secondary" onclick="rejectRewrite()" style="margin-left: 10px;">❌ Recusar</button>
-                            </div>
-                        </div>
-
-                        <div class="controls-section" id="manual-rewrite" style="display: none;">
-                            <div class="control-group">
-                                <label class="control-label">Digite a notícia manualmente</label>
-                                <textarea class="control-input" id="manual-rewrite-input" rows="6" placeholder="Digite sua versão da notícia"></textarea>
-                            </div>
-                            <button class="btn btn-primary" onclick="saveManualRewrite()">💾 Salvar Notícia</button>
-                        </div>
-                    </div>
                 </div>
             </div>
 
             <!-- Aba Legendas -->
             <div id="legendas" class="tab-content">
-                <h2>Gerador de Legendas Jornalísticas para Instagram</h2>
-                <p style="color: #6c757d; margin-bottom: 20px;">Transforme descrições de notícias em legendas curtas, chamativas e informativas para posts do Instagram do jornal Tribuna Hoje.</p>
+                <h2>Gerar Legendas com IA</h2>
                 
                 <div class="controls-section">
                     <div class="control-group">
-                        <label class="control-label">Descrição da Notícia *</label>
-                        <textarea class="control-input" id="legenda-texto" rows="6" placeholder="Cole aqui a descrição da notícia para gerar legendas jornalísticas..."></textarea>
+                        <label class="control-label">Notícia, resumo ou link</label>
+                        <textarea class="control-input" id="legenda-texto" rows="4" placeholder="Cole o conteúdo para gerar legendas..."></textarea>
+                    </div>
+                    <div class="control-group">
+                        <label class="control-label">Prompt personalizado (opcional)</label>
+                        <input type="text" class="control-input" id="custom-prompt" placeholder="Ex: Gere legendas informais e engajantes">
                     </div>
 
                     <div class="loading" id="captions-loading">
                         <div class="spinner"></div>
-                        <p>Analisando notícia e gerando legenda jornalística...</p>
+                        <p>Gerando legendas personalizadas...</p>
                     </div>
 
                     <div class="success-message" id="caption-success"></div>
                     <div class="error-message" id="caption-error"></div>
 
-                    <button class="btn btn-primary" onclick="generateCaptions()">🤖 Gerar Legenda Jornalística</button>
+                    <button class="btn btn-primary" onclick="generateCaptions()">🤖 Gerar Legendas</button>
                 </div>
 
                 <div class="ai-suggestions" id="captions-suggestions" style="display: none;">
-                    <h3>Legenda Jornalística Gerada (clique para copiar)</h3>
+                    <h3>Legendas Sugeridas (clique para copiar)</h3>
                     <div id="captions-list">
-                        <!-- Legenda será inserida aqui dinamicamente -->
-                    </div>
-                    <div style="margin-top: 15px; padding: 15px; background: #e3f2fd; border-radius: 8px; border-left: 4px solid #2196f3;">
-                        <p style="margin: 0; font-size: 0.9rem; color: #1976d2;"><strong>Dica:</strong> A legenda foi gerada seguindo o padrão jornalístico da Tribuna Hoje, com impacto inicial, contexto curto, tom jornalístico, palavras-chave obrigatórias e CTA estratégico.</p>
+                        <!-- Legendas serão inseridas aqui dinamicamente -->
                     </div>
                 </div>
             </div>
@@ -881,7 +755,7 @@ HTML_TEMPLATE = """
         // Estado global da aplicação
         let currentTab = 'gerar-posts';
         let selectedFormat = 'reels';
-        let selectedTemplate = 'watermark';
+        let selectedTemplate = 'stories_1';
         let uploadedFiles = {};
         let uploadedDataURLs = {};
         let generatedContent = {};
@@ -892,7 +766,7 @@ HTML_TEMPLATE = """
             const slug = title
                 .toLowerCase()
                 .normalize("NFD")
-                .replace(/[^\\w\\s-]/g, "")
+                .replace(/[^\w\s-]/g, "")
                 .replace(/\s+/g, "-")
                 .replace(/--+/g, "-");
             document.getElementById("slug-preview").textContent = `Link Sugerido: ${window.location.origin}/post/${slug}`;
@@ -953,10 +827,6 @@ HTML_TEMPLATE = """
                     }
                 });
             });
-            
-            // Inicializar campos baseado no template padrão
-            updateFieldsForTemplate(selectedTemplate);
-            updateButtonText(selectedTemplate);
         });
 
         // Função para enviar para API
@@ -992,6 +862,10 @@ HTML_TEMPLATE = """
             }
         }
 
+        // Função para atualizar transparência
+        function updateTransparency(value) {
+            document.getElementById('transparency-value').textContent = value + '%';
+        }
 
         // Função para aplicar marca d'água
         async function applyWatermark() {
@@ -1002,9 +876,13 @@ HTML_TEMPLATE = """
             
             showLoading('watermark');
             
+            const position = document.getElementById('watermark-position').value;
+            const transparency = document.getElementById('transparency').value;
             const apiResult = await sendToAPI("apply_watermark", {
                 fileType: uploadedFiles.watermark.type,
-                fileName: uploadedFiles.watermark.name
+                fileName: uploadedFiles.watermark.name,
+                position: position,
+                transparency: transparency
             });
 
             hideLoading('watermark');
@@ -1013,17 +891,9 @@ HTML_TEMPLATE = """
                     generatedImageUrls.watermark = apiResult.imageUrl;
                     const preview = document.getElementById('watermark-preview');
                     preview.innerHTML = `<img src="${apiResult.imageUrl}" style="max-width: 100%; max-height: 300px; border-radius: 10px;">`;
-                    
-                    // Mostrar link da imagem original se disponível
-                    let message = 'Marca d\'água aplicada com sucesso!';
-                    if (apiResult.originalImageUrl) {
-                        console.log('🔗 Link da sua imagem original:', apiResult.originalImageUrl);
-                        message += `<br><br><strong>Link da sua imagem:</strong><br><a href="${apiResult.originalImageUrl}" target="_blank">${apiResult.originalImageUrl}</a>`;
-                    }
-                    
-                    showSuccess(message, 'watermark');
+                    showSuccess('Marca d\\'água aplicada com sucesso!', 'watermark');
                     document.getElementById('open-watermark-image').href = apiResult.imageUrl;
-                    document.getElementById('open-watermark-image').style.display = 'inline-block';
+                    document.getElementById('open-watermark-image').style.display = 'inline-block';;
                 } else {
                     showSuccess('Marca d\\\'água processada com sucesso!', 'watermark');
                 }
@@ -1044,6 +914,11 @@ HTML_TEMPLATE = """
             if (format === 'feed') {
                 assuntoGroup.style.display = 'block';
                 creditosGroup.style.display = 'block';
+            } else if (format === 'watermark') {
+                assuntoGroup.style.display = 'none';
+                creditosGroup.style.display = 'none';
+                // Para watermark, selecionar automaticamente o template de watermark
+                selectTemplate('watermark');
             } else {
                 assuntoGroup.style.display = 'none';
                 creditosGroup.style.display = 'none';
@@ -1053,28 +928,22 @@ HTML_TEMPLATE = """
         // Função para selecionar template
         function selectTemplate(templateKey) {
             document.querySelectorAll('.template-item').forEach(item => item.classList.remove('selected'));
-            event.target.closest('.template-item').classList.add('selected');
+            
+            // Se chamada programaticamente, selecionar pelo templateKey
+            if (event && event.target) {
+                event.target.closest('.template-item').classList.add('selected');
+            } else {
+                // Buscar o elemento pelo templateKey
+                const templateElement = document.querySelector(`[onclick="selectTemplate('${templateKey}')"]`);
+                if (templateElement) {
+                    templateElement.classList.add('selected');
+                }
+            }
+            
             selectedTemplate = templateKey;
             
             // Mostrar/ocultar campos baseado no tipo de template
             updateFieldsForTemplate(templateKey);
-            
-            // Atualizar texto do botão
-            updateButtonText(templateKey);
-        }
-        
-        // Função para atualizar texto do botão
-        function updateButtonText(templateKey) {
-            const generateButton = document.getElementById('generate-button');
-            const downloadButton = document.getElementById('download-button');
-            
-            if (templateKey === 'watermark') {
-                generateButton.textContent = '🏷️ Aplicar Marca d\'Água';
-                downloadButton.textContent = '📥 Download Marca d\'Água';
-            } else {
-                generateButton.textContent = '🎨 Gerar Post';
-                downloadButton.textContent = '📥 Download Post';
-            }
         }
         
         // Função para atualizar campos baseado no template
@@ -1087,24 +956,20 @@ HTML_TEMPLATE = """
                 assuntoGroup.style.display = 'block';
                 creditosGroup.style.display = 'block';
             } else if (templateKey === 'watermark') {
-                // Template de watermark não precisa de título, assunto ou créditos
+                // Template de watermark não precisa desses campos
                 assuntoGroup.style.display = 'none';
                 creditosGroup.style.display = 'none';
-                document.getElementById('titulo').required = false;
             } else {
                 // Templates de Story e Reels não precisam desses campos
                 assuntoGroup.style.display = 'none';
                 creditosGroup.style.display = 'none';
-                document.getElementById('titulo').required = true;
             }
         }
 
         // Função para gerar post
         async function generatePost() {
             const titulo = document.getElementById('titulo').value;
-            
-            // Para template de watermark, título não é obrigatório
-            if (selectedTemplate !== 'watermark' && !titulo) {
+            if (!titulo) {
                 showError('O título é obrigatório.', 'post');
                 return;
             }
@@ -1127,12 +992,15 @@ HTML_TEMPLATE = """
             
             showLoading('post');
             
-            const apiResult = await sendToAPI("generate_post", {
+            // Para watermark, usar a mesma API mas com template específico
+            const apiAction = selectedTemplate === 'watermark' ? 'apply_watermark' : 'generate_post';
+            
+            const apiResult = await sendToAPI(apiAction, {
                 fileType: uploadedFiles.post.type,
                 fileName: uploadedFiles.post.name,
                 format: selectedFormat,
                 template: selectedTemplate,
-                title: titulo || 'N/A',
+                title: titulo,
                 subject: selectedFormat === 'feed' ? document.getElementById('assunto').value : 'N/A',
                 credits: selectedFormat === 'feed' ? document.getElementById('creditos').value : 'N/A'
             });
@@ -1143,18 +1011,15 @@ HTML_TEMPLATE = """
                     generatedImageUrls.post = apiResult.imageUrl;
                     const preview = document.getElementById('post-preview');
                     preview.innerHTML = `<img src="${apiResult.imageUrl}" style="max-width: 100%; max-height: 300px; border-radius: 10px;">`;
-                    const message = selectedTemplate === 'watermark' ? 'Marca d\'água aplicada com sucesso!' : 'Post gerado com sucesso!';
-                    showSuccess(message, 'post');
+                    showSuccess('Post gerado com sucesso!', 'post');
                     document.getElementById('open-post-image').href = apiResult.imageUrl;
                     document.getElementById('open-post-image').style.display = 'inline-block';
                 } else {
-                    const message = selectedTemplate === 'watermark' ? 'Marca d\'água processada com sucesso!' : 'Post processado com sucesso!';
-                    showSuccess(message, 'post');
+                    showSuccess('Post processado com sucesso!', 'post');
                 }
                 generatedContent.post = true;
             } else {
-                const message = selectedTemplate === 'watermark' ? 'Erro ao aplicar marca d\'água.' : 'Erro ao gerar post.';
-                showError(message, 'post');
+                showError('Erro ao gerar post.', 'post');
             }
         }
 
@@ -1225,8 +1090,9 @@ HTML_TEMPLATE = """
         // Função para gerar legendas com IA
         async function generateCaptions() {
             const texto = document.getElementById('legenda-texto').value;
+            const customPrompt = document.getElementById('custom-prompt').value;
             if (!texto.trim()) {
-                showError('Por favor, insira a descrição da notícia para gerar legendas.', 'caption');
+                showError('Por favor, insira o conteúdo para gerar legendas.', 'caption');
                 return;
             }
             
@@ -1234,7 +1100,8 @@ HTML_TEMPLATE = """
             document.getElementById('captions-suggestions').style.display = 'none';
 
             const apiResult = await sendToAPI('generate_captions_ai', {
-                content: texto
+                content: texto,
+                customPrompt: customPrompt
             });
 
             hideLoading('caption');
@@ -1249,73 +1116,9 @@ HTML_TEMPLATE = """
                     captionsList.appendChild(div);
                 });
                 document.getElementById('captions-suggestions').style.display = 'block';
-                showSuccess('Legenda jornalística gerada com sucesso!', 'caption');
+                showSuccess('Legendas geradas com sucesso!', 'caption');
             } else {
-                showError('Erro ao gerar legenda jornalística.', 'caption');
-            }
-        }
-
-        // Função para reescrever notícias
-        async function rewriteNews() {
-            const texto = document.getElementById('noticia-reescrever').value;
-            if (!texto.trim()) {
-                showError('Por favor, insira a notícia original para reescrever.', 'rewrite');
-                return;
-            }
-            
-            showLoading('rewrite');
-            document.getElementById('rewrite-suggestions').style.display = 'none';
-
-            const apiResult = await sendToAPI('rewrite_news_ai', {
-                content: texto
-            });
-
-            hideLoading('rewrite');
-            if (apiResult && apiResult.success && apiResult.rewrittenNews) {
-                document.getElementById('rewritten-news').innerHTML = `<p><strong>${apiResult.rewrittenNews}</strong></p>`;
-                document.getElementById('rewrite-suggestions').style.display = 'block';
-                showSuccess('Notícia reescrita com sucesso!', 'rewrite');
-            } else {
-                showError('Erro ao reescrever notícia.', 'rewrite');
-            }
-        }
-
-        // Função para aceitar notícia reescrita
-        function acceptRewrite() {
-            const rewrittenNews = document.getElementById('rewritten-news').textContent.replace('Notícia reescrita aparecerá aqui', '').trim();
-            document.getElementById('manual-rewrite-input').value = rewrittenNews;
-            document.getElementById('manual-rewrite').style.display = 'block';
-            document.getElementById('rewrite-suggestions').style.display = 'none';
-            showSuccess('Notícia aceita e pronta para salvar!', 'rewrite');
-        }
-
-        // Função para recusar notícia reescrita
-        function rejectRewrite() {
-            document.getElementById('manual-rewrite').style.display = 'block';
-            document.getElementById('rewrite-suggestions').style.display = 'none';
-            document.getElementById('manual-rewrite-input').value = '';
-            showError('Notícia recusada. Digite uma versão manualmente.', 'rewrite');
-        }
-
-        // Função para salvar notícia manual
-        async function saveManualRewrite() {
-            const manualRewrite = document.getElementById('manual-rewrite-input').value;
-            if (!manualRewrite.trim()) {
-                showError('Por favor, digite uma notícia.', 'rewrite');
-                return;
-            }
-            
-            showLoading('rewrite');
-            const apiResult = await sendToAPI('save_manual_rewrite', {
-                manualRewrite: manualRewrite
-            });
-
-            hideLoading('rewrite');
-            if (apiResult && apiResult.success) {
-                showSuccess('Notícia salva com sucesso!', 'rewrite');
-                generatedContent.rewrite = manualRewrite;
-            } else {
-                showError('Erro ao salvar notícia.', 'rewrite');
+                showError('Erro ao gerar legendas.', 'caption');
             }
         }
 
@@ -1408,18 +1211,14 @@ def process_request():
         return process_generate_title(payload)
     elif action == 'generate_captions_ai':
         return process_generate_captions(payload)
-    elif action == 'rewrite_news_ai':
-        return process_rewrite_news(payload)
     elif action == 'save_manual_title':
         return process_save_title(payload)
-    elif action == 'save_manual_rewrite':
-        return process_save_rewrite(payload)
     else:
         response_data['message'] = f"Ação não reconhecida: {action}"
         return jsonify(response_data), 400
 
 def process_watermark(payload, request):
-    """Processa aplicação de marca d'água usando Placid (sistema completo dos posts)"""
+    """Processa aplicação de marca d'água usando Placid"""
     response_data = {"success": False}
     
     # Verificar se há arquivo
@@ -1437,75 +1236,27 @@ def process_watermark(payload, request):
                 file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
                 file.save(file_path)
                 
-                # URL pública do arquivo - garantir que seja acessível
-                base_url = request.url_root.rstrip('/')
-                public_file_url = f"{base_url}/uploads/{unique_filename}"
-                print(f"URL pública do arquivo: {public_file_url}")
-                print(f"Arquivo salvo em: {file_path}")
-                print(f"Base URL: {base_url}")
-                print(f"Nome do arquivo: {unique_filename}")
+                # URL pública do arquivo
+                public_file_url = f"{request.url_root}uploads/{unique_filename}"
                 
-                # Testar se a URL está acessível
-                try:
-                    test_response = requests.get(public_file_url, timeout=5)
-                    print(f"✅ URL da imagem acessível: {test_response.status_code}")
-                except Exception as e:
-                    print(f"❌ URL da imagem não acessível: {e}")
-                    # Tentar URL alternativa
-                    alt_url = f"http://localhost:5000/uploads/{unique_filename}"
-                    print(f"Tentando URL alternativa: {alt_url}")
-                    try:
-                        test_response = requests.get(alt_url, timeout=5)
-                        print(f"✅ URL alternativa acessível: {test_response.status_code}")
-                        public_file_url = alt_url
-                    except Exception as e2:
-                        print(f"❌ URL alternativa também não acessível: {e2}")
-                
-                # Configurar template de marca d'água
-                template_key = 'watermark'  # Template de marca d'água
-                
-                # Verificar se o template existe
-                if template_key not in PLACID_TEMPLATES:
-                    template_key = 'watermark'  # Fallback
-                
-                template_info = PLACID_TEMPLATES[template_key]
-                template_uuid = template_info['uuid']
-                template_type = template_info.get('type', 'watermark')
-                template_dimensions = template_info.get('dimensions', {'width': 1200, 'height': 1200})
-                
-                # Para template de marca d'água, só precisa da imagem principal
-                # A logo já está no template do Placid
+                # Configurar layers para o Placid - apenas imgprincipal conforme solicitado
                 layers = {
                     "imgprincipal": {
                         "image": public_file_url
                     }
                 }
                 
-                # Modificações baseadas no template selecionado
+                # Modificações baseadas nos parâmetros
+                position = payload.get('position', 'bottom-right')
+                transparency = int(payload.get('transparency', 50))
+                
                 modifications = {
-                    "filename": f"watermarked_{timestamp}.png",
-                    "width": template_dimensions['width'],
-                    "height": template_dimensions['height'],
-                    "image_format": "auto",  # jpg/png automático
-                    "dpi": 72,  # DPI da imagem
-                    "color_mode": "rgb"  # Cor RGB
+                    "filename": f"watermarked_{timestamp}.png"
                 }
                 
-                # Verificar conectividade com o Placid
-                try:
-                    test_response = requests.get('https://api.placid.app/api/rest/images', 
-                                               headers={'Authorization': f'Bearer {PLACID_API_TOKEN}'}, 
-                                               timeout=10)
-                    print(f"Teste de conectividade com Placid: {test_response.status_code}")
-                except Exception as e:
-                    print(f"Erro de conectividade com Placid: {e}")
-                
                 # Criar imagem no Placid
-                print(f"Criando marca d'água no Placid com template: {template_uuid} ({PLACID_TEMPLATES[template_key]['name']})")
-                print(f"Layers enviados: {layers}")
-                print(f"Modifications enviadas: {modifications}")
-                print(f"URL da imagem principal: {public_file_url}")
-                
+                template_uuid = PLACID_TEMPLATES['watermark']['uuid']
+                print(f"Criando imagem no Placid com template: {template_uuid}")
                 image_result = create_placid_image(
                     template_uuid=template_uuid,
                     layers=layers,
@@ -1514,8 +1265,7 @@ def process_watermark(payload, request):
                 
                 if image_result:
                     image_id = image_result.get('id')
-                    print(f"Marca d'água criada com ID: {image_id}")
-                    print(f"Resposta completa do Placid: {image_result}")
+                    print(f"Imagem criada com ID: {image_id}")
                     
                     # Aguardar conclusão
                     final_image = poll_placid_image_status(image_id)
@@ -1523,36 +1273,11 @@ def process_watermark(payload, request):
                         response_data['success'] = True
                         response_data['imageUrl'] = final_image['image_url']
                         response_data['message'] = "Marca d'água aplicada com sucesso!"
-                        response_data['originalImageUrl'] = public_file_url
-                        print(f"Marca d'água finalizada: {final_image['image_url']}")
+                        print(f"Imagem finalizada: {final_image['image_url']}")
                     else:
-                        response_data['message'] = "Erro ao processar marca d'água no Placid"
-                        print(f"Erro no polling: {final_image}")
-                        # Fallback: retornar a imagem original
-                        response_data['success'] = True
-                        response_data['imageUrl'] = public_file_url
-                        response_data['originalImageUrl'] = public_file_url
-                        response_data['message'] = f"Arquivo processado (marca d'água temporariamente indisponível). URL da imagem: {public_file_url}"
+                        response_data['message'] = "Erro ao processar imagem no Placid"
                 else:
-                    # Fallback: criar marca d'água local
-                    print("Falha na criação da marca d'água no Placid - usando fallback local")
-                    watermark_filename = f"watermark_local_{timestamp}.jpg"
-                    watermark_path = os.path.join(UPLOAD_FOLDER, watermark_filename)
-                    
-                    if create_local_watermark(file_path, watermark_path):
-                        watermark_url = f"{base_url}/uploads/{watermark_filename}"
-                        response_data['success'] = True
-                        response_data['imageUrl'] = watermark_url
-                        response_data['originalImageUrl'] = public_file_url
-                        response_data['message'] = f"Marca d'água aplicada com sucesso (método local)! URL original: {public_file_url}"
-                        print(f"Fallback local: marca d'água criada em {watermark_url}")
-                    else:
-                        # Último recurso: retornar a imagem original
-                        response_data['success'] = True
-                        response_data['imageUrl'] = public_file_url
-                        response_data['originalImageUrl'] = public_file_url
-                        response_data['message'] = f"Arquivo processado (marca d'água temporariamente indisponível). URL da imagem: {public_file_url}"
-                        print(f"Fallback: retornando imagem original: {public_file_url}")
+                    response_data['message'] = "Erro ao criar imagem no Placid"
                     
             except Exception as e:
                 print(f"Erro ao processar marca d'água: {e}")
@@ -1609,28 +1334,24 @@ def process_generate_post(payload, request):
                 layers = {
                     "imgprincipal": {
                         "image": public_file_url
+                    },
+                    "titulocopy": {
+                        "text": title
                     }
                 }
                 
                 # Adicionar layers específicos baseado no tipo de template
-                if template_type == 'watermark':
-                    # Template de watermark: apenas imgprincipal (a logo já está no template)
-                    pass
-                elif template_type == 'feed':
-                    # Templates de Feed: credit, creditfoto, assuntext, titulocopy
-                    layers["titulocopy"] = {"text": title}
+                if template_type == 'feed':
+                    # Templates de Feed: credit, creditfoto, assuntext
                     if subject:
                         layers["assuntext"] = {"text": subject}
                     if credits:
                         layers["creditfoto"] = {"text": f"FOTO: {credits}"}
                     layers["credit"] = {"text": "Créditos gerais"}
                 elif template_type == 'story':
-                    # Templates de Story: imgfundo (fundo vermelho texturizado), titulocopy
-                    layers["titulocopy"] = {"text": title}
+                    # Templates de Story: imgfundo (fundo vermelho texturizado)
                     layers["imgfundo"] = {"image": "https://via.placeholder.com/1080x1920/FF0000/FFFFFF?text=FUNDO+VERMELHO"}
-                else:
-                    # Templates de Reels: titulocopy
-                    layers["titulocopy"] = {"text": title}
+                # Templates de Reels: mantém apenas imgprincipal e titulocopy
                 
                 # Modificações baseadas no template selecionado
                 modifications = {
@@ -1680,115 +1401,51 @@ def process_generate_post(payload, request):
     return jsonify(response_data)
 
 def process_generate_title(payload):
-    """Processa geração de título com IA usando o prompt do Gerador Avançado de Títulos Jornalísticos"""
+    """Processa geração de título com IA (simulado)"""
     response_data = {"success": False}
     
     news_content = payload.get('newsContent', '')
     if not news_content.strip():
-        response_data['message'] = "Descrição da notícia é obrigatória"
+        response_data['message'] = "Conteúdo da notícia é obrigatório"
         return jsonify(response_data), 400
     
-    # Simular geração de título seguindo o prompt fornecido
+    # Simular geração de título (você pode integrar com uma API de IA real aqui)
     import random
-    import re
-    
-    # Palavras-chave obrigatórias do prompt
-    keywords = ["Tribuna Hoje", "Alagoas", "Capital", "Interior", "Urgente", "Exclusivo", "Confirmado"]
-    
-    # Gerar título seguindo o formato do prompt (80-90 caracteres com reticências)
     sample_titles = [
-        "EXCLUSIVO: Descoberta Revolucionária Em Maceió Promete Transformar O Futuro...",
-        "URGENTE: Nova Pesquisa Em Alagoas Revela Dados Surpreendentes Sobre O Tema...",
-        "CONFIRMADO: Especialistas Analisam Impacto Das Mudanças Recentes Na Capital...",
-        "EXCLUSIVO: Desenvolvimento Inovador Em Maceió Promete Revolucionar O Setor...",
-        "URGENTE: Descoberta Em Alagoas Muda Completamente O Cenário Atual Da Região...",
-        "CONFIRMADO: Nova Pesquisa Na Capital Revela Informações Que Vão Chocar Todos...",
-        "EXCLUSIVO: Desenvolvimento No Interior De Alagoas Promete Impactar Todo O Estado...",
-        "URGENTE: Especialistas Confirmam Mudanças Que Vão Transformar A Realidade Local..."
+        "Descoberta revolucionária muda o futuro da tecnologia",
+        "Nova pesquisa revela dados surpreendentes sobre o tema",
+        "Especialistas analisam impacto das mudanças recentes",
+        "Desenvolvimento inovador promete transformar o setor"
     ]
     
-    # Escolher título aleatório e garantir que tenha entre 80-90 caracteres
     suggested_title = random.choice(sample_titles)
-    
-    # Garantir que termine com reticências
-    if not suggested_title.endswith('...'):
-        suggested_title += '...'
-    
-    # Verificar se está dentro do limite de caracteres
-    if len(suggested_title) > 90:
-        suggested_title = suggested_title[:87] + '...'
     
     response_data['success'] = True
     response_data['suggestedTitle'] = suggested_title
-    response_data['message'] = "Título impactante gerado com sucesso!"
+    response_data['message'] = "Título gerado com sucesso!"
     
     return jsonify(response_data)
 
 def process_generate_captions(payload):
-    """Processa geração de legendas com IA usando o prompt do Gerador de Legendas Jornalísticas"""
+    """Processa geração de legendas com IA (simulado)"""
     response_data = {"success": False}
     
     content = payload.get('content', '')
     if not content.strip():
-        response_data['message'] = "Descrição da notícia é obrigatória"
+        response_data['message'] = "Conteúdo é obrigatório"
         return jsonify(response_data), 400
     
-    # Simular geração de legendas seguindo o prompt fornecido
-    import random
-    
-    # Legendas seguindo o padrão jornalístico da Tribuna Hoje
+    # Simular geração de legendas (você pode integrar com uma API de IA real aqui)
     sample_captions = [
-        "🚨 URGENTE: Descoberta revolucionária em Maceió promete transformar o futuro da região. Especialistas confirmam que a inovação vai impactar diretamente a vida dos alagoanos. Acompanhe os desdobramentos exclusivos no link da bio! #TribunaHoje #Alagoas #Exclusivo",
-        
-        "📰 EXCLUSIVO: Nova pesquisa revela dados surpreendentes sobre o desenvolvimento em Alagoas. A capital registra crescimento significativo em setores estratégicos. Confira a análise completa e compartilhe sua opinião nos comentários! #Maceió #TribunaHoje #Desenvolvimento",
-        
-        "🔍 CONFIRMADO: Especialistas analisam impacto das mudanças recentes na economia local. O interior de Alagoas apresenta resultados promissores que podem influenciar todo o estado. Acesse o link na bio para a matéria completa! #Interior #TribunaHoje #Economia",
-        
-        "💡 EXCLUSIVO: Desenvolvimento inovador em Maceió promete revolucionar o setor tecnológico. A iniciativa pode gerar centenas de empregos na região. Siga @tribunahoje para mais informações e comente o que acha! #Tecnologia #TribunaHoje #Alagoas",
-        
-        "📊 URGENTE: Descoberta em Alagoas muda completamente o cenário atual da região. Dados oficiais confirmam crescimento em múltiplos setores. Acompanhe nossa cobertura exclusiva e compartilhe com quem precisa saber! #Exclusivo #TribunaHoje #Crescimento",
-        
-        "🎯 CONFIRMADO: Nova pesquisa na capital revela informações que vão impactar toda a população. Especialistas destacam a importância do momento atual. Acesse o link na bio e participe da discussão! #Maceió #TribunaHoje #Impacto"
+        "📰 Nova descoberta que vai mudar tudo! O que você acha?",
+        "🔍 Dados surpreendentes revelados hoje. Compartilhe sua opinião!",
+        "💡 Inovação que promete revolucionar o mercado. Comente abaixo!",
+        "📊 Análise completa do que está acontecendo. Tag alguém que precisa saber!"
     ]
     
-    # Escolher uma legenda aleatória
-    selected_caption = random.choice(sample_captions)
-    
     response_data['success'] = True
-    response_data['captions'] = [selected_caption]  # Retorna como array para manter compatibilidade
-    response_data['message'] = "Legenda jornalística gerada com sucesso!"
-    
-    return jsonify(response_data)
-
-def process_rewrite_news(payload):
-    """Processa reescrita de notícias usando o prompt do Modelador de Notícias - Estilo Tribuna Hoje"""
-    response_data = {"success": False}
-    
-    content = payload.get('content', '')
-    if not content.strip():
-        response_data['message'] = "Notícia original é obrigatória"
-        return jsonify(response_data), 400
-    
-    # Simular reescrita seguindo o prompt fornecido
-    import random
-    
-    # Exemplos de notícias reescritas no estilo Tribuna Hoje
-    sample_rewrites = [
-        "Alfredo Gaspar assume relatoria da CPMI que investiga fraudes no INSS\n\nO deputado federal Alfredo Gaspar (União Brasil-AL) foi designado relator da Comissão Parlamentar Mista de Inquérito (CPMI) que apura possíveis fraudes no Instituto Nacional do Seguro Social (INSS). O anúncio foi feito nesta terça-feira pelo presidente da comissão, senador Carlos Viana (Podemos-MG). Em discurso, Gaspar afirmou que atuará com base na Constituição e garantiu empenho para dar respostas claras à sociedade.",
-        
-        "Hospital de Maceió registra aumento nos casos de dengue\n\nO Hospital Universitário de Maceió registrou um aumento de 40% nos casos de dengue no último mês, segundo dados divulgados pela Secretaria de Estado da Saúde de Alagoas. A situação preocupa autoridades sanitárias que alertam para a necessidade de medidas preventivas. O secretário de saúde destacou a importância da colaboração da população no combate ao mosquito Aedes aegypti.",
-        
-        "MPF recomenda regras mais rígidas para construções na orla da Barra de São Miguel\n\nO Ministério Público Federal (MPF) emitiu recomendação para que a Prefeitura de Barra de São Miguel estabeleça regras mais rigorosas para construções na orla da cidade. O documento alerta para riscos ambientais e de segurança. A prefeitura tem 30 dias para se manifestar sobre as recomendações apresentadas pelo órgão federal.",
-        
-        "Motoristas de aplicativo devem manter MEI regular para garantir isenção do IPVA\n\nA Secretaria da Fazenda de Alagoas esclareceu que motoristas de aplicativo precisam manter o Microempreendedor Individual (MEI) em dia para garantir a isenção do Imposto sobre Propriedade de Veículos Automotores (IPVA). A medida visa coibir irregularidades e garantir que apenas trabalhadores devidamente registrados tenham acesso ao benefício fiscal."
-    ]
-    
-    # Escolher uma reescrita aleatória
-    selected_rewrite = random.choice(sample_rewrites)
-    
-    response_data['success'] = True
-    response_data['rewrittenNews'] = selected_rewrite
-    response_data['message'] = "Notícia reescrita no estilo Tribuna Hoje com sucesso!"
+    response_data['captions'] = sample_captions
+    response_data['message'] = "Legendas geradas com sucesso!"
     
     return jsonify(response_data)
 
@@ -1809,23 +1466,6 @@ def process_save_title(payload):
     
     return jsonify(response_data)
 
-def process_save_rewrite(payload):
-    """Processa salvamento de notícia reescrita manual"""
-    response_data = {"success": False}
-    
-    manual_rewrite = payload.get('manualRewrite', '')
-    if not manual_rewrite.strip():
-        response_data['message'] = "Notícia é obrigatória"
-        return jsonify(response_data), 400
-    
-    # Aqui você pode salvar a notícia em um banco de dados
-    print(f"Notícia reescrita salva: {manual_rewrite}")
-    
-    response_data['success'] = True
-    response_data['message'] = "Notícia salva com sucesso!"
-    
-    return jsonify(response_data)
-
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
@@ -1836,19 +1476,5 @@ if __name__ == '__main__':
     print(f"📋 Templates disponíveis: {len(PLACID_TEMPLATES)}")
     for key, template in PLACID_TEMPLATES.items():
         print(f"   - {template['name']}: {template['uuid']}")
-    
-    # Verificar se PIL está disponível
-    if PIL_AVAILABLE:
-        print("✅ PIL/Pillow disponível - marca d'água local funcionará")
-    else:
-        print("⚠️ PIL/Pillow não disponível - apenas marca d'água via Placid")
-    
-    # Configuração para produção vs desenvolvimento
-    import os
-    port = int(os.environ.get('PORT', 5000))
-    debug = os.environ.get('FLASK_ENV') != 'production'
-    
-    print(f"🌐 Servidor rodando em: http://0.0.0.0:{port}")
-    print(f"🔧 Modo debug: {debug}")
-    
-    app.run(debug=debug, host='0.0.0.0', port=port)
+    print(f"🌐 Servidor rodando em: http://0.0.0.0:5000" )
+    app.run(debug=True, host='0.0.0.0', port=5000)
