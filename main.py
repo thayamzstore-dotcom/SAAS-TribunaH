@@ -1346,8 +1346,10 @@ def process_watermark(payload, request):
                 file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
                 file.save(file_path)
                 
-                # URL pública do arquivo
-                public_file_url = f"{request.url_root}uploads/{unique_filename}"
+                # URL pública do arquivo - garantir que seja acessível
+                base_url = request.url_root.rstrip('/')
+                public_file_url = f"{base_url}/uploads/{unique_filename}"
+                print(f"URL pública do arquivo: {public_file_url}")
                 
                 # Configurar layers baseado no template de marca d'água
                 template_key = 'watermark'
@@ -1380,6 +1382,9 @@ def process_watermark(payload, request):
                 
                 # Criar imagem no Placid
                 print(f"Criando marca d'água no Placid com template: {template_uuid} ({PLACID_TEMPLATES[template_key]['name']})")
+                print(f"Layers enviados: {layers}")
+                print(f"Modifications enviadas: {modifications}")
+                
                 image_result = create_placid_image(
                     template_uuid=template_uuid,
                     layers=layers,
@@ -1389,6 +1394,7 @@ def process_watermark(payload, request):
                 if image_result:
                     image_id = image_result.get('id')
                     print(f"Marca d'água criada com ID: {image_id}")
+                    print(f"Resposta completa do Placid: {image_result}")
                     
                     # Aguardar conclusão
                     final_image = poll_placid_image_status(image_id)
@@ -1399,8 +1405,10 @@ def process_watermark(payload, request):
                         print(f"Marca d'água finalizada: {final_image['image_url']}")
                     else:
                         response_data['message'] = "Erro ao processar marca d'água no Placid"
+                        print(f"Erro no polling: {final_image}")
                 else:
                     response_data['message'] = "Erro ao criar marca d'água no Placid"
+                    print("Falha na criação da marca d'água no Placid")
                     
             except Exception as e:
                 print(f"Erro ao processar marca d'água: {e}")
