@@ -59,6 +59,13 @@ PLACID_TEMPLATES = {
         'type': 'feed',
         'dimensions': {'width': 1200, 'height': 1200}
     },
+    'watermark1': {
+        'uuid': 'an1vhwhytqnpe',
+        'name': 'Watermark1',
+        'description': 'Template para Watermark',
+        'type': 'feed',
+        'dimensions': {'width': 1200, 'height': 1200}
+    },
     'feed_2_white': {
         'uuid': 'ye0bmj6dgoneq',
         'name': 'Feed - Modelo 2 (White)',
@@ -602,10 +609,6 @@ HTML_TEMPLATE = """
 
                     <h3>Templates Disponíveis</h3>
                     <div class="template-grid" id="template-grid">
-                        <div class="template-item" onclick="selectTemplate('watermark')">
-                            <div class="template-preview">🏷️</div>
-                            <p>Marca d'Água</p>
-                        </div>
                         <div class="template-item selected" onclick="selectTemplate('stories_1')">
                             <div class="template-preview">📱</div>
                             <p>Stories - Modelo 1</p>
@@ -625,6 +628,10 @@ HTML_TEMPLATE = """
                         <div class="template-item" onclick="selectTemplate('feed_1_red')">
                             <div class="template-preview">🔴</div>
                             <p>Feed - Modelo 1 (Red)</p>
+                        </div>
+                        <div class="template-item" onclick="selectTemplate('feed_1_red_copy')">
+                            <div class="template-preview">🔴</div>
+                            <p>WaterMark1</p>
                         </div>
                         <div class="template-item" onclick="selectTemplate('feed_2_white')">
                             <div class="template-preview">⚪</div>
@@ -1280,9 +1287,6 @@ def process_watermark(payload, request):
                 
                 # URL pública do arquivo
                 public_file_url = f"{request.url_root}uploads/{unique_filename}"
-                print(f"DEBUG - Arquivo salvo em: {file_path}")
-                print(f"DEBUG - URL pública gerada: {public_file_url}")
-                print(f"DEBUG - Request URL root: {request.url_root}")
                 
                 # Usar a mesma lógica dos outros templates
                 template_key = 'watermark'
@@ -1291,9 +1295,9 @@ def process_watermark(payload, request):
                 template_type = template_info.get('type', 'watermark')
                 template_dimensions = template_info.get('dimensions', {'width': 1080, 'height': 1080})
                 
-                # Configurar layers - usar 'img' conforme documentação do Placid
+                # Configurar layers - apenas imgprincipal para watermark
                 layers = {
-                    "img": {
+                    "imgprincipal": {
                         "image": public_file_url
                     }
                 }
@@ -1309,18 +1313,12 @@ def process_watermark(payload, request):
                 }
                 
                 # Criar imagem no Placid (mesma lógica dos outros templates)
-                print(f"DEBUG - Criando watermark no Placid com template: {template_uuid} ({PLACID_TEMPLATES[template_key]['name']})")
-                print(f"DEBUG - URL da imagem: {public_file_url}")
-                print(f"DEBUG - Layers: {layers}")
-                print(f"DEBUG - Modifications: {modifications}")
-                
+                print(f"Criando watermark no Placid com template: {template_uuid} ({PLACID_TEMPLATES[template_key]['name']})")
                 image_result = create_placid_image(
                     template_uuid=template_uuid,
                     layers=layers,
                     modifications=modifications
                 )
-                
-                print(f"DEBUG - Resposta do Placid: {image_result}")
                 
                 if image_result:
                     image_id = image_result.get('id')
