@@ -1280,6 +1280,9 @@ def process_watermark(payload, request):
                 
                 # URL pública do arquivo
                 public_file_url = f"{request.url_root}uploads/{unique_filename}"
+                print(f"DEBUG - Arquivo salvo em: {file_path}")
+                print(f"DEBUG - URL pública gerada: {public_file_url}")
+                print(f"DEBUG - Request URL root: {request.url_root}")
                 
                 # Usar a mesma lógica dos outros templates
                 template_key = 'watermark'
@@ -1288,9 +1291,9 @@ def process_watermark(payload, request):
                 template_type = template_info.get('type', 'watermark')
                 template_dimensions = template_info.get('dimensions', {'width': 1080, 'height': 1080})
                 
-                # Configurar layers - apenas imgprincipal para watermark
+                # Configurar layers - usar 'img' conforme documentação do Placid
                 layers = {
-                    "imgprincipal": {
+                    "img": {
                         "image": public_file_url
                     }
                 }
@@ -1306,12 +1309,18 @@ def process_watermark(payload, request):
                 }
                 
                 # Criar imagem no Placid (mesma lógica dos outros templates)
-                print(f"Criando watermark no Placid com template: {template_uuid} ({PLACID_TEMPLATES[template_key]['name']})")
+                print(f"DEBUG - Criando watermark no Placid com template: {template_uuid} ({PLACID_TEMPLATES[template_key]['name']})")
+                print(f"DEBUG - URL da imagem: {public_file_url}")
+                print(f"DEBUG - Layers: {layers}")
+                print(f"DEBUG - Modifications: {modifications}")
+                
                 image_result = create_placid_image(
                     template_uuid=template_uuid,
                     layers=layers,
                     modifications=modifications
                 )
+                
+                print(f"DEBUG - Resposta do Placid: {image_result}")
                 
                 if image_result:
                     image_id = image_result.get('id')
