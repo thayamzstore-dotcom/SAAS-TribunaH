@@ -111,18 +111,29 @@ def create_placid_image(template_uuid, layers, modifications=None, webhook_succe
     
     try:
         print(f"DEBUG - Enviando para Placid: {PLACID_API_URL}")
-        print(f"DEBUG - Payload: {payload}")
-        print(f"DEBUG - Headers: {headers}")
+        print(f"DEBUG - Template UUID: {payload.get('template_uuid', 'N/A')}")
+        print(f"DEBUG - Layers: {payload.get('layers', {})}")
         
         response = requests.post(PLACID_API_URL, json=payload, headers=headers)
         print(f"DEBUG - Status code: {response.status_code}")
-        print(f"DEBUG - Response: {response.text}")
         
+        if response.status_code != 200:
+            print(f"ERRO - Status não é 200: {response.status_code}")
+            print(f"ERRO - Response: {response.text}")
+            return None
+            
         response.raise_for_status()
-        return response.json()
+        result = response.json()
+        print(f"DEBUG - Resposta JSON: {result}")
+        return result
     except requests.exceptions.RequestException as e:
         print(f"ERRO ao criar imagem no Placid: {e}")
-        print(f"DEBUG - Response text: {response.text if 'response' in locals() else 'N/A'}")
+        if 'response' in locals():
+            print(f"ERRO - Status: {response.status_code}")
+            print(f"ERRO - Response: {response.text}")
+        return None
+    except Exception as e:
+        print(f"ERRO inesperado: {e}")
         return None
 
 def get_placid_image(image_id):
@@ -1244,6 +1255,39 @@ HTML_TEMPLATE = """
 def index():
     return render_template_string(HTML_TEMPLATE)
 
+@app.route('/test-placid')
+def test_placid():
+    """Testa a conexão com a API do Placid"""
+    try:
+        # Teste simples com template conhecido
+        test_payload = {
+            'template_uuid': 'qe0qo74vbrgxe',  # feed_1_red
+            'layers': {
+                'imgprincipal': {
+                    'image': 'https://via.placeholder.com/1200x1200/FF0000/FFFFFF?text=TESTE'
+                }
+            },
+            'create_now': True
+        }
+        
+        headers = {
+            'Authorization': f'Bearer {PLACID_API_TOKEN}',
+            'Content-Type': 'application/json'
+        }
+        
+        print(f"TESTE - Enviando para Placid: {test_payload}")
+        response = requests.post(PLACID_API_URL, json=test_payload, headers=headers)
+        print(f"TESTE - Status: {response.status_code}")
+        print(f"TESTE - Response: {response.text}")
+        
+        if response.status_code == 200:
+            return f"✅ Placid funcionando! Status: {response.status_code}<br>Response: {response.text}"
+        else:
+            return f"❌ Erro no Placid! Status: {response.status_code}<br>Response: {response.text}"
+            
+    except Exception as e:
+        return f"❌ Erro na conexão: {e}"
+
 @app.route('/api/process', methods=['POST'])
 def process_request():
     # Verificar se é FormData ou JSON
@@ -1386,9 +1430,8 @@ def process_generate_post(payload, request):
                 file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
                 file.save(file_path)
                 
-                # URL pública do arquivo - usando formato de post
-                post_slug = title.lower().replace(' ', '-').replace('_', '-') if title else 'post'
-                public_file_url = f"{request.url_root}post/{post_slug}"
+                # URL pública do arquivo - usar uploads direto
+                public_file_url = f"{request.url_root}uploads/{unique_filename}"
                 print(f"DEBUG - Link público gerado: {public_file_url}")
                 
                 # DEBUG: Logs para debugar
@@ -1402,6 +1445,7 @@ def process_generate_post(payload, request):
                     print(f"ERRO - Template '{template_key}' não encontrado!")
                     print(f"Templates disponíveis: {list(PLACID_TEMPLATES.keys())}")
                     template_key = 'feed_1_red'  # Fallback
+                    print(f"DEBUG - Usando fallback: {template_key}")
                 
                 template_info = PLACID_TEMPLATES[template_key]
                 template_uuid = template_info['uuid']
