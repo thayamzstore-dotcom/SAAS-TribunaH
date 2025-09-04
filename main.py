@@ -581,13 +581,6 @@ HTML_TEMPLATE = """
 
                 <div class="two-column">
                     <div>
-                        <div class="controls-section">
-                            <div class="control-group">
-                                <label class="control-label">Título *</label>
-                                <input type="text" class="control-input" id="watermark-titulo" placeholder="Digite o título da marca d'água" required>
-                            </div>
-                        </div>
-
                         <div class="loading" id="watermark-loading">
                             <div class="spinner"></div>
                             <p>Aplicando marca d'água...</p>
@@ -947,12 +940,6 @@ HTML_TEMPLATE = """
 
         // Função para aplicar marca d'água
         async function applyWatermark() {
-            const titulo = document.getElementById('watermark-titulo').value;
-            if (!titulo) {
-                showError('O título é obrigatório.', 'watermark');
-                return;
-            }
-            
             if (!uploadedFiles.watermark) {
                 showError('Por favor, faça upload de um arquivo primeiro.', 'watermark');
                 return;
@@ -962,8 +949,7 @@ HTML_TEMPLATE = """
             
             const apiResult = await sendToAPI("apply_watermark", {
                 fileType: uploadedFiles.watermark.type,
-                fileName: uploadedFiles.watermark.name,
-                title: titulo
+                fileName: uploadedFiles.watermark.name
             });
 
             hideLoading('watermark');
@@ -1365,7 +1351,6 @@ def process_watermark(payload, request):
                 
                 # Configurar layers baseado no template de marca d'água
                 template_key = 'watermark'
-                title = payload.get('title', '')
                 
                 # Verificar se o template existe
                 if template_key not in PLACID_TEMPLATES:
@@ -1376,22 +1361,12 @@ def process_watermark(payload, request):
                 template_type = template_info.get('type', 'watermark')
                 template_dimensions = template_info.get('dimensions', {'width': 1200, 'height': 1200})
                 
-                # Configurar layers baseado no template de marca d'água
+                # Configurar layers baseado no template de marca d'água (apenas imagem principal)
                 layers = {
                     "imgprincipal": {
                         "image": public_file_url
-                    },
-                    "titulocopy": {
-                        "text": title
                     }
                 }
-                
-                # Adicionar layers específicos para marca d'água
-                if template_type == 'watermark':
-                    # Template de marca d'água: adicionar logo
-                    layers["logomarca"] = {
-                        "image": "https://via.placeholder.com/100x50/000000/FFFFFF?text=LOGO"  # Substitua pela URL do seu logo
-                    }
                 
                 # Modificações baseadas no template selecionado
                 modifications = {
