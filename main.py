@@ -1328,7 +1328,7 @@ def process_request():
         return jsonify(response_data), 400
 
 def process_watermark(payload, request):
-    """Processa aplicação de marca d'água usando Placid (mesmo sistema dos posts)"""
+    """Processa aplicação de marca d'água usando Placid (sistema completo dos posts)"""
     response_data = {"success": False}
     
     # Verificar se há arquivo
@@ -1346,13 +1346,15 @@ def process_watermark(payload, request):
                 file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
                 file.save(file_path)
                 
-                # URL pública do arquivo - garantir que seja acessível
-                base_url = request.url_root.rstrip('/')
-                public_file_url = f"{base_url}/uploads/{unique_filename}"
-                print(f"URL pública do arquivo: {public_file_url}")
+                # URL pública do arquivo
+                public_file_url = f"{request.url_root}uploads/{unique_filename}"
                 
-                # Configurar layers baseado no template de marca d'água
-                template_key = 'watermark'
+                # Configurar layers baseado no formato e template
+                format_type = 'watermark'  # Fixo para marca d'água
+                template_key = 'watermark'  # Template de marca d'água
+                title = 'Marca d\'Água'  # Título fixo
+                subject = ''  # Não necessário para marca d'água
+                credits = ''  # Não necessário para marca d'água
                 
                 # Verificar se o template existe
                 if template_key not in PLACID_TEMPLATES:
@@ -1363,12 +1365,22 @@ def process_watermark(payload, request):
                 template_type = template_info.get('type', 'watermark')
                 template_dimensions = template_info.get('dimensions', {'width': 1200, 'height': 1200})
                 
-                # Configurar layers baseado no template de marca d'água (apenas imagem principal)
+                # Configurar layers baseado no tipo de template
                 layers = {
                     "imgprincipal": {
                         "image": public_file_url
+                    },
+                    "titulocopy": {
+                        "text": title
                     }
                 }
+                
+                # Adicionar layers específicos baseado no tipo de template
+                if template_type == 'watermark':
+                    # Template de marca d'água: adicionar logo
+                    layers["logomarca"] = {
+                        "image": "https://via.placeholder.com/100x50/000000/FFFFFF?text=LOGO"  # Substitua pela URL do seu logo
+                    }
                 
                 # Modificações baseadas no template selecionado
                 modifications = {
@@ -1382,9 +1394,6 @@ def process_watermark(payload, request):
                 
                 # Criar imagem no Placid
                 print(f"Criando marca d'água no Placid com template: {template_uuid} ({PLACID_TEMPLATES[template_key]['name']})")
-                print(f"Layers enviados: {layers}")
-                print(f"Modifications enviadas: {modifications}")
-                
                 image_result = create_placid_image(
                     template_uuid=template_uuid,
                     layers=layers,
@@ -1394,7 +1403,6 @@ def process_watermark(payload, request):
                 if image_result:
                     image_id = image_result.get('id')
                     print(f"Marca d'água criada com ID: {image_id}")
-                    print(f"Resposta completa do Placid: {image_result}")
                     
                     # Aguardar conclusão
                     final_image = poll_placid_image_status(image_id)
@@ -1405,10 +1413,8 @@ def process_watermark(payload, request):
                         print(f"Marca d'água finalizada: {final_image['image_url']}")
                     else:
                         response_data['message'] = "Erro ao processar marca d'água no Placid"
-                        print(f"Erro no polling: {final_image}")
                 else:
                     response_data['message'] = "Erro ao criar marca d'água no Placid"
-                    print("Falha na criação da marca d'água no Placid")
                     
             except Exception as e:
                 print(f"Erro ao processar marca d'água: {e}")
