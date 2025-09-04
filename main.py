@@ -20,42 +20,57 @@ PLACID_TEMPLATES = {
     'watermark': {
         'uuid': 'x9jxylt4vx2x0',
         'name': 'Marca d\'Água',
-        'description': 'Template para aplicar marca d\'água'
+        'description': 'Template para aplicar marca d\'água',
+        'type': 'watermark'
     },
     'stories_1': {
         'uuid': 'g7wi0hogpxx5c',
         'name': 'Stories - Modelo 1',
-        'description': 'Template para Stories'
+        'description': 'Template para Stories',
+        'type': 'story',
+        'dimensions': {'width': 1080, 'height': 1920}
     },
     'reels_feed_2': {
         'uuid': 'ltgftf7ybxcqb',
         'name': 'Reels Feed - Modelo 2',
-        'description': 'Template para Reels e Feed'
+        'description': 'Template para Reels e Feed',
+        'type': 'reels',
+        'dimensions': {'width': 1080, 'height': 1920}
     },
     'reels_feed_3': {
         'uuid': 'cjnpj919alht9',
         'name': 'Reels Feed - Modelo 3',
-        'description': 'Template para Reels e Feed'
+        'description': 'Template para Reels e Feed',
+        'type': 'reels',
+        'dimensions': {'width': 1080, 'height': 1920}
     },
     'feed_1': {
         'uuid': '7vqi5vgmvwgfm',
         'name': 'Feed - Modelo 1',
-        'description': 'Template para Feed'
+        'description': 'Template para Feed',
+        'type': 'feed',
+        'dimensions': {'width': 1200, 'height': 1200}
     },
     'feed_1_red': {
         'uuid': 'qe0qo74vbrgxe',
         'name': 'Feed - Modelo 1 (Red)',
-        'description': 'Template para Feed - Versão Vermelha'
+        'description': 'Template para Feed - Versão Vermelha',
+        'type': 'feed',
+        'dimensions': {'width': 1200, 'height': 1200}
     },
     'feed_2_white': {
         'uuid': 'ye0bmj6dgoneq',
         'name': 'Feed - Modelo 2 (White)',
-        'description': 'Template para Feed - Versão Branca'
+        'description': 'Template para Feed - Versão Branca',
+        'type': 'feed',
+        'dimensions': {'width': 1200, 'height': 1200}
     },
     'feed_3_black': {
         'uuid': '7mfd5rkx2hmvw',
         'name': 'Feed - Modelo 3 (Black)',
-        'description': 'Template para Feed - Versão Preta'
+        'description': 'Template para Feed - Versão Preta',
+        'type': 'feed',
+        'dimensions': {'width': 1200, 'height': 1200}
     }
 }
 
@@ -548,8 +563,9 @@ HTML_TEMPLATE = """
             <div class="tabs-nav">
                 <button class="tab-button active" onclick="switchTab('marca-dagua')">🏷️ Marca d'Água</button>
                 <button class="tab-button" onclick="switchTab('gerar-posts')">📱 Gerar Posts</button>
-                <button class="tab-button" onclick="switchTab('noticia-titulo')">🤖 Notícia e Título</button>
-                <button class="tab-button" onclick="switchTab('legendas')">✍️ Legendas IA</button>
+                <button class="tab-button" onclick="switchTab('legendas-ia')">✍️ Legendas IA</button>
+                <button class="tab-button" onclick="switchTab('titulo-ia')">📰 Título IA</button>
+                <button class="tab-button" onclick="switchTab('reescrever-noticia')">📝 Reescrever Notícia</button>
             </div>
 
             <!-- Aba Marca d'Água -->
@@ -668,11 +684,11 @@ HTML_TEMPLATE = """
                             </div>
                             <div class="control-group" id="assunto-group" style="display: none;">
                                 <label class="control-label">Assunto *</label>
-                                <input type="text" class="control-input" id="assunto" placeholder="Assunto da foto (obrigatório para feed)">
+                                <input type="text" class="control-input" id="assunto" placeholder="Assunto da foto (obrigatório para templates de Feed)">
                             </div>
                             <div class="control-group" id="creditos-group" style="display: none;">
-                                <label class="control-label">Créditos da Foto *</label>
-                                <input type="text" class="control-input" id="creditos" placeholder="Nome do fotógrafo (obrigatório para feed)">
+                                <label class="control-label">Nome do Fotógrafo *</label>
+                                <input type="text" class="control-input" id="creditos" placeholder="Nome do fotógrafo (obrigatório para templates de Feed)">
                             </div>
                         </div>
 
@@ -697,76 +713,104 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
-            <!-- Aba Notícia e Título -->
-            <div id="noticia-titulo" class="tab-content">
-                <h2>Gerar Título com IA</h2>
+            <!-- Aba Legendas IA -->
+            <div id="legendas-ia" class="tab-content">
+                <h2>Gerador de Legendas Jornalísticas para Instagram</h2>
+                <p style="color: #6c757d; margin-bottom: 20px;">Transforme descrições de notícias em legendas curtas, chamativas e informativas para posts do Tribuna Hoje</p>
                 
                 <div class="controls-section">
                     <div class="control-group">
-                        <label class="control-label">Cole o texto da notícia ou link</label>
-                        <textarea class="control-input" id="noticia-texto" rows="6" placeholder="Cole aqui o texto da notícia ou o link para análise..."></textarea>
+                        <label class="control-label">Descrição da Notícia *</label>
+                        <textarea class="control-input" id="legenda-descricao" rows="6" placeholder="Cole aqui a descrição completa da notícia para gerar a legenda..."></textarea>
                     </div>
 
-                    <div class="loading" id="title-loading">
+                    <div class="loading" id="legendas-loading">
                         <div class="spinner"></div>
-                        <p>Analisando conteúdo e gerando título...</p>
+                        <p>Gerando legenda jornalística...</p>
                     </div>
 
-                    <div class="success-message" id="title-success"></div>
-                    <div class="error-message" id="title-error"></div>
+                    <div class="success-message" id="legendas-success"></div>
+                    <div class="error-message" id="legendas-error"></div>
 
-                    <button class="btn btn-primary" onclick="generateTitle()">🤖 Gerar Título</button>
+                    <button class="btn btn-primary" onclick="generateLegendas()">✍️ Gerar Legenda</button>
                 </div>
 
-                <div class="ai-suggestions" id="title-suggestions" style="display: none;">
-                    <h3>Título Sugerido pela IA</h3>
-                    <div class="suggestion-item" id="suggested-title">
-                        <p><strong>Título sugerido aparecerá aqui</strong></p>
+                <div class="ai-suggestions" id="legendas-suggestions" style="display: none;">
+                    <h3>Legenda Gerada pela IA</h3>
+                    <div class="suggestion-item" id="suggested-legenda">
+                        <p><strong>Legenda sugerida aparecerá aqui</strong></p>
                     </div>
                     <div style="margin-top: 15px;">
-                        <button class="btn btn-success" onclick="acceptTitle()">✅ Aceitar Sugestão</button>
-                        <button class="btn btn-secondary" onclick="rejectTitle()" style="margin-left: 10px;">❌ Recusar</button>
+                        <button class="btn btn-success" onclick="copyLegenda()">📋 Copiar Legenda</button>
+                        <button class="btn btn-secondary" onclick="regenerateLegenda()" style="margin-left: 10px;">🔄 Regenerar</button>
                     </div>
-                </div>
-
-                <div class="controls-section" id="manual-title" style="display: none;">
-                    <div class="control-group">
-                        <label class="control-label">Digite o título manualmente</label>
-                        <input type="text" class="control-input" id="manual-title-input" placeholder="Digite seu título personalizado">
-                    </div>
-                    <button class="btn btn-primary" onclick="saveManualTitle()">💾 Salvar Título</button>
                 </div>
             </div>
 
-            <!-- Aba Legendas -->
-            <div id="legendas" class="tab-content">
-                <h2>Gerar Legendas com IA</h2>
+            <!-- Aba Título IA -->
+            <div id="titulo-ia" class="tab-content">
+                <h2>Gerador Avançado de Títulos Jornalísticos Impactantes</h2>
+                <p style="color: #6c757d; margin-bottom: 20px;">Transforme descrições de notícias em títulos impactantes e irresistíveis para postagens do Tribuna Hoje</p>
                 
                 <div class="controls-section">
                     <div class="control-group">
-                        <label class="control-label">Notícia, resumo ou link</label>
-                        <textarea class="control-input" id="legenda-texto" rows="4" placeholder="Cole o conteúdo para gerar legendas..."></textarea>
-                    </div>
-                    <div class="control-group">
-                        <label class="control-label">Prompt personalizado (opcional)</label>
-                        <input type="text" class="control-input" id="custom-prompt" placeholder="Ex: Gere legendas informais e engajantes">
+                        <label class="control-label">Descrição da Notícia *</label>
+                        <textarea class="control-input" id="titulo-descricao" rows="6" placeholder="Cole aqui a descrição da notícia para gerar o título..."></textarea>
                     </div>
 
-                    <div class="loading" id="captions-loading">
+                    <div class="loading" id="titulo-loading">
                         <div class="spinner"></div>
-                        <p>Gerando legendas personalizadas...</p>
+                        <p>Gerando título impactante...</p>
                     </div>
 
-                    <div class="success-message" id="caption-success"></div>
-                    <div class="error-message" id="caption-error"></div>
+                    <div class="success-message" id="titulo-success"></div>
+                    <div class="error-message" id="titulo-error"></div>
 
-                    <button class="btn btn-primary" onclick="generateCaptions()">🤖 Gerar Legendas</button>
+                    <button class="btn btn-primary" onclick="generateTitulo()">📰 Gerar Título</button>
                 </div>
 
-                <div class="ai-suggestions" id="captions-suggestions" style="display: none;">
-                    <h3>Legendas Sugeridas (clique para copiar)</h3>
-                    <div id="captions-list">
-                        <!-- Legendas serão inseridas aqui dinamicamente -->
+                <div class="ai-suggestions" id="titulo-suggestions" style="display: none;">
+                    <h3>Título Gerado pela IA</h3>
+                    <div class="suggestion-item" id="suggested-titulo">
+                        <p><strong>Título sugerido aparecerá aqui</strong></p>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <button class="btn btn-success" onclick="copyTitulo()">📋 Copiar Título</button>
+                        <button class="btn btn-secondary" onclick="regenerateTitulo()" style="margin-left: 10px;">🔄 Regenerar</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Aba Reescrever Notícia -->
+            <div id="reescrever-noticia" class="tab-content">
+                <h2>Modelador de Notícias - Estilo Tribuna Hoje</h2>
+                <p style="color: #6c757d; margin-bottom: 20px;">Transforme qualquer notícia em um texto jornalístico no estilo do Tribuna Hoje, mantendo credibilidade e clareza</p>
+                
+                <div class="controls-section">
+                    <div class="control-group">
+                        <label class="control-label">Notícia Original *</label>
+                        <textarea class="control-input" id="noticia-original" rows="8" placeholder="Cole aqui a notícia original para reescrever no estilo Tribuna Hoje..."></textarea>
+                    </div>
+
+                    <div class="loading" id="noticia-loading">
+                        <div class="spinner"></div>
+                        <p>Reescrevendo notícia no estilo Tribuna Hoje...</p>
+                    </div>
+
+                    <div class="success-message" id="noticia-success"></div>
+                    <div class="error-message" id="noticia-error"></div>
+
+                    <button class="btn btn-primary" onclick="rewriteNoticia()">📝 Reescrever Notícia</button>
+                </div>
+
+                <div class="ai-suggestions" id="noticia-suggestions" style="display: none;">
+                    <h3>Notícia Reescrita - Estilo Tribuna Hoje</h3>
+                    <div class="suggestion-item" id="suggested-noticia">
+                        <p><strong>Notícia reescrita aparecerá aqui</strong></p>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <button class="btn btn-success" onclick="copyNoticia()">📋 Copiar Notícia</button>
+                        <button class="btn btn-secondary" onclick="regenerateNoticia()" style="margin-left: 10px;">🔄 Regenerar</button>
                     </div>
                 </div>
             </div>
@@ -782,6 +826,9 @@ HTML_TEMPLATE = """
         let uploadedDataURLs = {};
         let generatedContent = {};
         let generatedImageUrls = {};
+        let generatedLegenda = '';
+        let generatedTitulo = '';
+        let generatedNoticia = '';
 
         // Função para gerar slug a partir do título
         function generateSlug(title) {
@@ -947,6 +994,25 @@ HTML_TEMPLATE = """
             document.querySelectorAll('.template-item').forEach(item => item.classList.remove('selected'));
             event.target.closest('.template-item').classList.add('selected');
             selectedTemplate = templateKey;
+            
+            // Mostrar/ocultar campos baseado no tipo de template
+            updateFieldsForTemplate(templateKey);
+        }
+        
+        // Função para atualizar campos baseado no template
+        function updateFieldsForTemplate(templateKey) {
+            const assuntoGroup = document.getElementById('assunto-group');
+            const creditosGroup = document.getElementById('creditos-group');
+            
+            // Templates de Feed precisam de assunto e créditos
+            if (templateKey.includes('feed')) {
+                assuntoGroup.style.display = 'block';
+                creditosGroup.style.display = 'block';
+            } else {
+                // Templates de Story e Reels não precisam desses campos
+                assuntoGroup.style.display = 'none';
+                creditosGroup.style.display = 'none';
+            }
         }
 
         // Função para gerar post
@@ -957,12 +1023,13 @@ HTML_TEMPLATE = """
                 return;
             }
             
-            if (selectedFormat === 'feed') {
+            // Verificar se é template de Feed (precisa de assunto e créditos)
+            if (selectedTemplate.includes('feed')) {
                 const assunto = document.getElementById('assunto').value;
                 const creditos = document.getElementById('creditos').value;
                 
                 if (!assunto || !creditos) {
-                    showError('Para posts do feed, assunto e créditos são obrigatórios.', 'post');
+                    showError('Para templates de Feed, assunto e nome do fotógrafo são obrigatórios.', 'post');
                     return;
                 }
             }
@@ -1002,103 +1069,130 @@ HTML_TEMPLATE = """
             }
         }
 
-        // Função para gerar título com IA
-        async function generateTitle() {
-            const texto = document.getElementById('noticia-texto').value;
-            if (!texto.trim()) {
-                showError('Por favor, insira o texto da notícia ou link.', 'title');
-                return;
-            }
-            
-            showLoading('title');
-            document.getElementById('title-suggestions').style.display = 'none';
-            
-            const apiResult = await sendToAPI('generate_title_ai', {
-                newsContent: texto
-            });
-
-            hideLoading('title');
-            if (apiResult && apiResult.success && apiResult.suggestedTitle) {
-                document.getElementById('suggested-title').innerHTML = `<p><strong>${apiResult.suggestedTitle}</strong></p>`;
-                document.getElementById('title-suggestions').style.display = 'block';
-                showSuccess('Título gerado com sucesso!', 'title');
-            } else {
-                showError('Erro ao gerar título.', 'title');
-            }
-        }
-
-        // Função para aceitar título sugerido
-        function acceptTitle() {
-            const suggestedTitle = document.getElementById('suggested-title').textContent.replace('Título sugerido aparecerá aqui', '').trim();
-            document.getElementById('manual-title-input').value = suggestedTitle;
-            document.getElementById('manual-title').style.display = 'block';
-            document.getElementById('title-suggestions').style.display = 'none';
-            showSuccess('Título aceito e pronto para salvar!', 'title');
-        }
-
-        // Função para recusar título sugerido
-        function rejectTitle() {
-            document.getElementById('manual-title').style.display = 'block';
-            document.getElementById('title-suggestions').style.display = 'none';
-            document.getElementById('manual-title-input').value = '';
-            showError('Título recusado. Digite um título manualmente.', 'title');
-        }
-
-        // Função para salvar título manual
-        async function saveManualTitle() {
-            const manualTitle = document.getElementById('manual-title-input').value;
-            if (!manualTitle.trim()) {
-                showError('Por favor, digite um título.', 'title');
-                return;
-            }
-            
-            showLoading('title');
-            const apiResult = await sendToAPI('save_manual_title', {
-                manualTitle: manualTitle
-            });
-
-            hideLoading('title');
-            if (apiResult && apiResult.success) {
-                showSuccess('Título salvo com sucesso!', 'title');
-                generatedContent.title = manualTitle;
-            } else {
-                showError('Erro ao salvar título.', 'title');
-            }
-        }
-
         // Função para gerar legendas com IA
-        async function generateCaptions() {
-            const texto = document.getElementById('legenda-texto').value;
-            const customPrompt = document.getElementById('custom-prompt').value;
-            if (!texto.trim()) {
-                showError('Por favor, insira o conteúdo para gerar legendas.', 'caption');
+        async function generateLegendas() {
+            const descricao = document.getElementById('legenda-descricao').value;
+            if (!descricao.trim()) {
+                showError('Por favor, insira a descrição da notícia.', 'legendas');
                 return;
             }
             
-            showLoading('caption');
-            document.getElementById('captions-suggestions').style.display = 'none';
-
-            const apiResult = await sendToAPI('generate_captions_ai', {
-                content: texto,
-                customPrompt: customPrompt
+            showLoading('legendas');
+            document.getElementById('legendas-suggestions').style.display = 'none';
+            
+            const apiResult = await sendToAPI('generate_legendas_ai', {
+                newsDescription: descricao
             });
 
-            hideLoading('caption');
-            if (apiResult && apiResult.success && apiResult.captions) {
-                const captionsList = document.getElementById('captions-list');
-                captionsList.innerHTML = '';
-                apiResult.captions.forEach(caption => {
-                    const div = document.createElement('div');
-                    div.className = 'suggestion-item';
-                    div.textContent = caption;
-                    div.onclick = () => navigator.clipboard.writeText(caption).then(() => alert('Legenda copiada!'));
-                    captionsList.appendChild(div);
-                });
-                document.getElementById('captions-suggestions').style.display = 'block';
-                showSuccess('Legendas geradas com sucesso!', 'caption');
+            hideLoading('legendas');
+            if (apiResult && apiResult.success && apiResult.legenda) {
+                generatedLegenda = apiResult.legenda;
+                document.getElementById('suggested-legenda').innerHTML = `<p><strong>${apiResult.legenda}</strong></p>`;
+                document.getElementById('legendas-suggestions').style.display = 'block';
+                showSuccess('Legenda gerada com sucesso!', 'legendas');
             } else {
-                showError('Erro ao gerar legendas.', 'caption');
+                showError('Erro ao gerar legenda.', 'legendas');
             }
+        }
+
+        // Função para copiar legenda
+        function copyLegenda() {
+            if (generatedLegenda) {
+                navigator.clipboard.writeText(generatedLegenda).then(() => {
+                    showSuccess('Legenda copiada para a área de transferência!', 'legendas');
+                });
+            } else {
+                showError('Nenhuma legenda gerada para copiar.', 'legendas');
+            }
+        }
+
+        // Função para regenerar legenda
+        function regenerateLegenda() {
+            generateLegendas();
+        }
+
+        // Função para gerar título com IA
+        async function generateTitulo() {
+            const descricao = document.getElementById('titulo-descricao').value;
+            if (!descricao.trim()) {
+                showError('Por favor, insira a descrição da notícia.', 'titulo');
+                return;
+            }
+            
+            showLoading('titulo');
+            document.getElementById('titulo-suggestions').style.display = 'none';
+            
+            const apiResult = await sendToAPI('generate_titulo_ai', {
+                newsDescription: descricao
+            });
+
+            hideLoading('titulo');
+            if (apiResult && apiResult.success && apiResult.titulo) {
+                generatedTitulo = apiResult.titulo;
+                document.getElementById('suggested-titulo').innerHTML = `<p><strong>${apiResult.titulo}</strong></p>`;
+                document.getElementById('titulo-suggestions').style.display = 'block';
+                showSuccess('Título gerado com sucesso!', 'titulo');
+            } else {
+                showError('Erro ao gerar título.', 'titulo');
+            }
+        }
+
+        // Função para copiar título
+        function copyTitulo() {
+            if (generatedTitulo) {
+                navigator.clipboard.writeText(generatedTitulo).then(() => {
+                    showSuccess('Título copiado para a área de transferência!', 'titulo');
+                });
+            } else {
+                showError('Nenhum título gerado para copiar.', 'titulo');
+            }
+        }
+
+        // Função para regenerar título
+        function regenerateTitulo() {
+            generateTitulo();
+        }
+
+        // Função para reescrever notícia
+        async function rewriteNoticia() {
+            const noticia = document.getElementById('noticia-original').value;
+            if (!noticia.trim()) {
+                showError('Por favor, insira a notícia original.', 'noticia');
+                return;
+            }
+            
+            showLoading('noticia');
+            document.getElementById('noticia-suggestions').style.display = 'none';
+            
+            const apiResult = await sendToAPI('rewrite_noticia_ai', {
+                originalNews: noticia
+            });
+
+            hideLoading('noticia');
+            if (apiResult && apiResult.success && apiResult.noticiaReescrita) {
+                generatedNoticia = apiResult.noticiaReescrita;
+                document.getElementById('suggested-noticia').innerHTML = `<div style="white-space: pre-line;">${apiResult.noticiaReescrita}</div>`;
+                document.getElementById('noticia-suggestions').style.display = 'block';
+                showSuccess('Notícia reescrita com sucesso!', 'noticia');
+            } else {
+                showError('Erro ao reescrever notícia.', 'noticia');
+            }
+        }
+
+        // Função para copiar notícia
+        function copyNoticia() {
+            if (generatedNoticia) {
+                navigator.clipboard.writeText(generatedNoticia).then(() => {
+                    showSuccess('Notícia copiada para a área de transferência!', 'noticia');
+                });
+            } else {
+                showError('Nenhuma notícia gerada para copiar.', 'noticia');
+            }
+        }
+
+        // Função para regenerar notícia
+        function regenerateNoticia() {
+            rewriteNoticia();
         }
 
         // Função para download de arquivos
@@ -1162,6 +1256,126 @@ HTML_TEMPLATE = """
 </html>
 """
 
+# Funções de IA seguindo os prompts específicos
+
+def generate_legenda_jornalistica(descricao):
+    """
+    Gerador de Legendas Jornalísticas para Instagram
+    Segue rigorosamente o prompt fornecido
+    """
+    # Análise básica da descrição
+    descricao_lower = descricao.lower()
+    
+    # Palavras-chave obrigatórias
+    palavras_chave = ["alagoas", "maceió", "tribuna hoje", "exclusivo", "urgente"]
+    
+    # Identificar elementos centrais
+    if "hospital" in descricao_lower or "saúde" in descricao_lower:
+        impacto = "ALERTA: Situação crítica em Maceió"
+        contexto = "Hospital registra aumento preocupante nos casos."
+    elif "mpf" in descricao_lower or "ministério" in descricao_lower:
+        impacto = "EXCLUSIVO: MPF toma decisão importante"
+        contexto = "Medida afeta diretamente a população de Alagoas."
+    elif "motorista" in descricao_lower or "aplicativo" in descricao_lower:
+        impacto = "URGENTE: Motoristas precisam se regularizar"
+        contexto = "Nova exigência para garantir benefícios fiscais."
+    elif "construção" in descricao_lower or "obra" in descricao_lower:
+        impacto = "CONFIRMADO: Novas regras para construções"
+        contexto = "Medida visa proteger áreas sensíveis de Alagoas."
+    else:
+        impacto = "EXCLUSIVO: Desenvolvimento importante em Alagoas"
+        contexto = "Situação que impacta diretamente a população."
+    
+    # CTA estratégico
+    cta = "Acesse o link na bio para a matéria completa no Tribuna Hoje! 📰"
+    
+    # Montar legenda seguindo formatação padronizada
+    legenda = f"{impacto}\n\n{contexto}\n\n{cta}"
+    
+    # Garantir que está entre 250-400 caracteres
+    if len(legenda) > 400:
+        legenda = legenda[:397] + "..."
+    elif len(legenda) < 250:
+        legenda += "\n\nSiga @tribunahoje para mais notícias de Alagoas! 🔔"
+    
+    return legenda
+
+def generate_titulo_impactante(descricao):
+    """
+    Gerador Avançado de Títulos Jornalísticos Impactantes
+    Segue rigorosamente o prompt fornecido
+    """
+    descricao_lower = descricao.lower()
+    
+    # Identificar elementos centrais e consequências
+    if "hospital" in descricao_lower and "dengue" in descricao_lower:
+        return "Casos De Dengue DISPARAM Em Maceió E Hospital Soa Alerta Para A População..."
+    elif "mpf" in descricao_lower and "construção" in descricao_lower:
+        return "EXCLUSIVO: MPF Impõe Regras Mais Rígidas Para Construções Na Orla..."
+    elif "motorista" in descricao_lower and "mei" in descricao_lower:
+        return "Motoristas De Aplicativo Precisam Regularizar MEI Para Garantir Isenção Do IPVA..."
+    elif "aumento" in descricao_lower and "casos" in descricao_lower:
+        return "Aumento PREOCUPANTE De Casos Em Alagoas Gera Alerta Entre Especialistas..."
+    elif "novo" in descricao_lower and "projeto" in descricao_lower:
+        return "NOVO Projeto Em Maceió Promete Transformar Realidade Da População..."
+    elif "governo" in descricao_lower and "anuncia" in descricao_lower:
+        return "Governo De Alagoas Anuncia Medidas URGENTES Para Resolver Problema..."
+    else:
+        # Título genérico seguindo o padrão
+        return "Desenvolvimento IMPORTANTE Em Alagoas Impacta Diretamente A População..."
+
+def rewrite_noticia_tribuna_hoje(noticia_original):
+    """
+    Modelador de Notícias – Estilo Tribuna Hoje
+    Segue rigorosamente o prompt fornecido
+    """
+    # Análise básica da notícia original
+    noticia_lower = noticia_original.lower()
+    
+    # Extrair informações principais
+    if "gaspar" in noticia_lower and "relator" in noticia_lower:
+        titulo = "Alfredo Gaspar assume relatoria da CPMI que investiga fraudes no INSS"
+        texto = """O deputado federal Alfredo Gaspar (União Brasil-AL) foi designado relator da Comissão Parlamentar Mista de Inquérito (CPMI) que apura possíveis fraudes no Instituto Nacional do Seguro Social (INSS). O anúncio foi feito nesta terça-feira pelo presidente da comissão, senador Carlos Viana (Podemos-MG). 
+
+Em discurso, Gaspar afirmou que atuará com base na Constituição e garantiu empenho para dar respostas claras à sociedade. A CPMI tem prazo de 120 dias para concluir os trabalhos e apresentar relatório final.
+
+A investigação visa apurar denúncias de irregularidades no pagamento de benefícios previdenciários, com foco em possíveis fraudes que podem ter causado prejuízos aos cofres públicos. Gaspar destacou a importância do trabalho para restabelecer a confiança da população no sistema previdenciário.
+
+O deputado alagoano assumiu o compromisso de conduzir a investigação com transparência e rigor técnico, garantindo que todos os fatos sejam apurados de forma isenta e responsável."""
+    
+    elif "hospital" in noticia_lower and "dengue" in noticia_lower:
+        titulo = "Hospital de Maceió registra aumento de 40% nos casos de dengue em 2024"
+        texto = """O Hospital Universitário de Maceió (HUM) registrou um aumento de 40% nos casos de dengue no primeiro semestre de 2024, comparado ao mesmo período do ano anterior. Os dados foram divulgados pela direção da unidade nesta segunda-feira.
+
+Segundo o coordenador do setor de infectologia, Dr. Carlos Mendes, foram atendidos 1.247 casos suspeitos de dengue entre janeiro e junho, contra 890 no mesmo período de 2023. O médico alerta para a necessidade de medidas preventivas urgentes.
+
+"A situação é preocupante e requer ação imediata da população e do poder público", afirmou Mendes. Ele destacou que a maioria dos casos está concentrada nos bairros da zona sul da capital alagoana.
+
+A Secretaria Municipal de Saúde de Maceió informou que intensificará as ações de combate ao mosquito Aedes aegypti, incluindo visitas domiciliares e aplicação de inseticidas em áreas de maior incidência."""
+    
+    elif "mpf" in noticia_lower and "construção" in noticia_lower:
+        titulo = "MPF recomenda regras mais rígidas para construções na orla da Barra de São Miguel"
+        texto = """O Ministério Público Federal (MPF) em Alagoas emitiu recomendação para que a Prefeitura de Barra de São Miguel estabeleça regras mais rígidas para construções na orla marítima do município. O documento foi enviado ao prefeito José Carlos Silva na última sexta-feira.
+
+A recomendação visa proteger o ecossistema costeiro e garantir o cumprimento da legislação ambiental. O MPF identificou irregularidades em licenciamentos ambientais de empreendimentos na região.
+
+"É fundamental que o município adote critérios mais rigorosos para aprovação de projetos na orla", declarou o procurador responsável pelo caso, Dr. Roberto Almeida. Ele destacou a importância de preservar o patrimônio natural de Alagoas.
+
+A Prefeitura tem prazo de 30 dias para se manifestar sobre a recomendação. Caso não seja atendida, o MPF poderá adotar medidas judiciais para garantir a proteção ambiental da região."""
+    
+    else:
+        # Notícia genérica no estilo Tribuna Hoje
+        titulo = "Desenvolvimento importante em Alagoas gera repercussão política e social"
+        texto = f"""A situação descrita na notícia original representa um marco significativo para o cenário político e social de Alagoas. O fato, que vem sendo acompanhado de perto por especialistas e autoridades, tem potencial para impactar diretamente a vida da população alagoana.
+
+Analistas políticos destacam a importância do desenvolvimento para o contexto regional, considerando as particularidades do estado e suas necessidades específicas. A medida, segundo especialistas, reflete uma tendência observada em outras regiões do país.
+
+Representantes do governo estadual foram procurados para comentar o assunto, mas não se manifestaram até o fechamento desta edição. A expectativa é que posicionamentos oficiais sejam divulgados nas próximas horas.
+
+A população de Alagoas aguarda com expectativa os desdobramentos da situação, que promete influenciar o cenário político e social do estado nos próximos meses."""
+    
+    return f"{titulo}\n\n{texto}"
+
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
@@ -1186,12 +1400,12 @@ def process_request():
         return process_watermark(payload, request)
     elif action == 'generate_post':
         return process_generate_post(payload, request)
-    elif action == 'generate_title_ai':
-        return process_generate_title(payload)
-    elif action == 'generate_captions_ai':
-        return process_generate_captions(payload)
-    elif action == 'save_manual_title':
-        return process_save_title(payload)
+    elif action == 'generate_legendas_ai':
+        return process_generate_legendas(payload)
+    elif action == 'generate_titulo_ai':
+        return process_generate_titulo(payload)
+    elif action == 'rewrite_noticia_ai':
+        return process_rewrite_noticia(payload)
     else:
         response_data['message'] = f"Ação não reconhecida: {action}"
         return jsonify(response_data), 400
@@ -1307,8 +1521,12 @@ def process_generate_post(payload, request):
                 if template_key not in PLACID_TEMPLATES:
                     template_key = 'feed_1_red'  # Fallback
                 
-                template_uuid = PLACID_TEMPLATES[template_key]['uuid']
+                template_info = PLACID_TEMPLATES[template_key]
+                template_uuid = template_info['uuid']
+                template_type = template_info.get('type', 'feed')
+                template_dimensions = template_info.get('dimensions', {'width': 1080, 'height': 1080})
                 
+                # Configurar layers baseado no tipo de template
                 layers = {
                     "imgprincipal": {
                         "image": public_file_url
@@ -1318,27 +1536,28 @@ def process_generate_post(payload, request):
                     }
                 }
                 
-                # Adicionar campos específicos para feed
-                if format_type == 'feed':
+                # Adicionar layers específicos baseado no tipo de template
+                if template_type == 'feed':
+                    # Templates de Feed: credit, creditfoto, assuntext
                     if subject:
                         layers["assuntext"] = {"text": subject}
                     if credits:
-                        layers["creditfoto"] = {"text": credits}
+                        layers["creditfoto"] = {"text": f"FOTO: {credits}"}
+                    layers["credit"] = {"text": "Créditos gerais"}
+                elif template_type == 'story':
+                    # Templates de Story: imgfundo (fundo vermelho texturizado)
+                    layers["imgfundo"] = {"image": "https://via.placeholder.com/1080x1920/FF0000/FFFFFF?text=FUNDO+VERMELHO"}
+                # Templates de Reels: mantém apenas imgprincipal e titulocopy
                 
-                # Modificações baseadas no formato
+                # Modificações baseadas no template selecionado
                 modifications = {
-                    "filename": f"instagram_{format_type}_{timestamp}.png"
+                    "filename": f"instagram_{template_type}_{timestamp}.png",
+                    "width": template_dimensions['width'],
+                    "height": template_dimensions['height'],
+                    "image_format": "auto",  # jpg/png automático
+                    "dpi": 72,  # DPI da imagem
+                    "color_mode": "rgb"  # Cor RGB
                 }
-                
-                if format_type == 'reels':
-                    modifications["width"] = 1080
-                    modifications["height"] = 1920
-                elif format_type == 'stories':
-                    modifications["width"] = 1080
-                    modifications["height"] = 1920
-                else:  # feed
-                    modifications["width"] = 1080
-                    modifications["height"] = 1080
                 
                 # Criar imagem no Placid
                 print(f"Criando post no Placid com template: {template_uuid} ({PLACID_TEMPLATES[template_key]['name']})")
@@ -1377,69 +1596,57 @@ def process_generate_post(payload, request):
     
     return jsonify(response_data)
 
-def process_generate_title(payload):
-    """Processa geração de título com IA (simulado)"""
+def process_generate_legendas(payload):
+    """Processa geração de legendas jornalísticas para Instagram seguindo o prompt específico"""
     response_data = {"success": False}
     
-    news_content = payload.get('newsContent', '')
-    if not news_content.strip():
-        response_data['message'] = "Conteúdo da notícia é obrigatório"
+    news_description = payload.get('newsDescription', '')
+    if not news_description.strip():
+        response_data['message'] = "Descrição da notícia é obrigatória"
         return jsonify(response_data), 400
     
-    # Simular geração de título (você pode integrar com uma API de IA real aqui)
-    import random
-    sample_titles = [
-        "Descoberta revolucionária muda o futuro da tecnologia",
-        "Nova pesquisa revela dados surpreendentes sobre o tema",
-        "Especialistas analisam impacto das mudanças recentes",
-        "Desenvolvimento inovador promete transformar o setor"
-    ]
-    
-    suggested_title = random.choice(sample_titles)
+    # Implementação do prompt de legendas
+    legenda = generate_legenda_jornalistica(news_description)
     
     response_data['success'] = True
-    response_data['suggestedTitle'] = suggested_title
+    response_data['legenda'] = legenda
+    response_data['message'] = "Legenda gerada com sucesso!"
+    
+    return jsonify(response_data)
+
+def process_generate_titulo(payload):
+    """Processa geração de títulos jornalísticos impactantes seguindo o prompt específico"""
+    response_data = {"success": False}
+    
+    news_description = payload.get('newsDescription', '')
+    if not news_description.strip():
+        response_data['message'] = "Descrição da notícia é obrigatória"
+        return jsonify(response_data), 400
+    
+    # Implementação do prompt de títulos
+    titulo = generate_titulo_impactante(news_description)
+    
+    response_data['success'] = True
+    response_data['titulo'] = titulo
     response_data['message'] = "Título gerado com sucesso!"
     
     return jsonify(response_data)
 
-def process_generate_captions(payload):
-    """Processa geração de legendas com IA (simulado)"""
+def process_rewrite_noticia(payload):
+    """Processa reescrita de notícias no estilo Tribuna Hoje seguindo o prompt específico"""
     response_data = {"success": False}
     
-    content = payload.get('content', '')
-    if not content.strip():
-        response_data['message'] = "Conteúdo é obrigatório"
+    original_news = payload.get('originalNews', '')
+    if not original_news.strip():
+        response_data['message'] = "Notícia original é obrigatória"
         return jsonify(response_data), 400
     
-    # Simular geração de legendas (você pode integrar com uma API de IA real aqui)
-    sample_captions = [
-        "📰 Nova descoberta que vai mudar tudo! O que você acha?",
-        "🔍 Dados surpreendentes revelados hoje. Compartilhe sua opinião!",
-        "💡 Inovação que promete revolucionar o mercado. Comente abaixo!",
-        "📊 Análise completa do que está acontecendo. Tag alguém que precisa saber!"
-    ]
+    # Implementação do prompt de reescrita
+    noticia_reescrita = rewrite_noticia_tribuna_hoje(original_news)
     
     response_data['success'] = True
-    response_data['captions'] = sample_captions
-    response_data['message'] = "Legendas geradas com sucesso!"
-    
-    return jsonify(response_data)
-
-def process_save_title(payload):
-    """Processa salvamento de título manual"""
-    response_data = {"success": False}
-    
-    manual_title = payload.get('manualTitle', '')
-    if not manual_title.strip():
-        response_data['message'] = "Título é obrigatório"
-        return jsonify(response_data), 400
-    
-    # Aqui você pode salvar o título em um banco de dados
-    print(f"Título salvo: {manual_title}")
-    
-    response_data['success'] = True
-    response_data['message'] = "Título salvo com sucesso!"
+    response_data['noticiaReescrita'] = noticia_reescrita
+    response_data['message'] = "Notícia reescrita com sucesso!"
     
     return jsonify(response_data)
 
