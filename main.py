@@ -18,7 +18,7 @@ PLACID_API_URL = 'https://api.placid.app/api/rest/images'
 # Templates disponíveis
 PLACID_TEMPLATES = {
     'watermark': {
-        'uuid': 'x9jxylt4vx2x0',
+        'uuid': 'qe0qo74vbrgxe',  # Usando o mesmo UUID do feed que funciona
         'name': 'Marca d\'Água',
         'description': 'Template para aplicar marca d\'água',
         'type': 'watermark'
@@ -92,7 +92,7 @@ def create_placid_image(template_uuid, layers, modifications=None, webhook_succe
     payload = {
         'template_uuid': template_uuid,
         'layers': layers,
-        'create_now': True
+        'create_now': False
     }
     
     if modifications:
@@ -874,6 +874,21 @@ HTML_TEMPLATE = """
                 return;
             }
             
+            // Validar campos obrigatórios igual ao feed
+            const titulo = document.getElementById('titulo').value;
+            const assunto = document.getElementById('assunto').value;
+            const creditos = document.getElementById('creditos').value;
+            
+            if (!titulo) {
+                showError('O título é obrigatório.', 'watermark');
+                return;
+            }
+            
+            if (!assunto || !creditos) {
+                showError('Para templates de watermark, assunto e nome do fotógrafo são obrigatórios.', 'watermark');
+                return;
+            }
+            
             showLoading('watermark');
             
             const position = document.getElementById('watermark-position').value;
@@ -882,7 +897,10 @@ HTML_TEMPLATE = """
                 fileType: uploadedFiles.watermark.type,
                 fileName: uploadedFiles.watermark.name,
                 position: position,
-                transparency: transparency
+                transparency: transparency,
+                title: document.getElementById('titulo').value,
+                subject: document.getElementById('assunto').value,
+                credits: document.getElementById('creditos').value
             });
 
             hideLoading('watermark');
@@ -915,8 +933,8 @@ HTML_TEMPLATE = """
                 assuntoGroup.style.display = 'block';
                 creditosGroup.style.display = 'block';
             } else if (format === 'watermark') {
-                assuntoGroup.style.display = 'none';
-                creditosGroup.style.display = 'none';
+                assuntoGroup.style.display = 'block';
+                creditosGroup.style.display = 'block';
                 // Para watermark, selecionar automaticamente o template de watermark
                 selectTemplate('watermark');
             } else {
@@ -956,9 +974,9 @@ HTML_TEMPLATE = """
                 assuntoGroup.style.display = 'block';
                 creditosGroup.style.display = 'block';
             } else if (templateKey === 'watermark') {
-                // Template de watermark não precisa desses campos
-                assuntoGroup.style.display = 'none';
-                creditosGroup.style.display = 'none';
+                // Template de watermark usa EXATAMENTE a mesma forma do feed
+                assuntoGroup.style.display = 'block';
+                creditosGroup.style.display = 'block';
             } else {
                 // Templates de Story e Reels não precisam desses campos
                 assuntoGroup.style.display = 'none';
@@ -968,10 +986,13 @@ HTML_TEMPLATE = """
 
         // Função para gerar post
         async function generatePost() {
-            const titulo = document.getElementById('titulo').value;
-            if (!titulo) {
-                showError('O título é obrigatório.', 'post');
-                return;
+            // Para watermark, não precisa de título
+            if (selectedTemplate !== 'watermark') {
+                const titulo = document.getElementById('titulo').value;
+                if (!titulo) {
+                    showError('O título é obrigatório.', 'post');
+                    return;
+                }
             }
             
             // Verificar se é template de Feed (precisa de assunto e créditos)
@@ -992,15 +1013,15 @@ HTML_TEMPLATE = """
             
             showLoading('post');
             
-            // Para watermark, usar a mesma API mas com template específico
-            const apiAction = selectedTemplate === 'watermark' ? 'apply_watermark' : 'generate_post';
+            // Usar sempre a mesma API para todos os templates
+            const apiAction = 'generate_post';
             
             const apiResult = await sendToAPI(apiAction, {
                 fileType: uploadedFiles.post.type,
                 fileName: uploadedFiles.post.name,
                 format: selectedFormat,
                 template: selectedTemplate,
-                title: titulo,
+                title: selectedTemplate === 'watermark' ? '' : document.getElementById('titulo').value,
                 subject: selectedFormat === 'feed' ? document.getElementById('assunto').value : 'N/A',
                 credits: selectedFormat === 'feed' ? document.getElementById('creditos').value : 'N/A'
             });
@@ -1246,10 +1267,22 @@ def process_watermark(payload, request):
                 template_type = template_info.get('type', 'watermark')
                 template_dimensions = template_info.get('dimensions', {'width': 1080, 'height': 1080})
                 
-                # Configurar layers - apenas imgprincipal conforme solicitado
+                # Configurar layers - usar EXATAMENTE a mesma forma do feed - modelo 1 (red)
                 layers = {
                     "imgprincipal": {
                         "image": public_file_url
+                    },
+                    "titulocopy": {
+                        "text": payload.get('title', '')
+                    },
+                    "assuntext": {
+                        "text": payload.get('subject', '')
+                    },
+                    "creditfoto": {
+                        "text": f"FOTO: {payload.get('credits', '')}"
+                    },
+                    "credit": {
+                        "text": "Créditos gerais"
                     }
                 }
                 
@@ -1309,6 +1342,13 @@ def process_generate_post(payload, request):
         file = request.files.get('file')
         if file and file.filename:
             try:
+                # Configurar layers baseado no formato e template (definir variáveis primeiro)
+                format_type = payload.get('format', 'reels')
+                template_key = payload.get('template', 'feed_1_red')
+                title = payload.get('title', '')
+                subject = payload.get('subject', '')
+                credits = payload.get('credits', '')
+                
                 # Salvar arquivo temporariamente
                 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
                 ext = file.filename.split('.')[-1].lower()
@@ -1319,15 +1359,16 @@ def process_generate_post(payload, request):
                 file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
                 file.save(file_path)
                 
-                # URL pública do arquivo
-                public_file_url = f"{request.url_root}uploads/{unique_filename}"
+                # URL pública do arquivo - usando formato de post
+                post_slug = title.lower().replace(' ', '-').replace('_', '-') if title else 'post'
+                public_file_url = f"{request.url_root}post/{post_slug}"
+                print(f"DEBUG - Link público gerado: {public_file_url}")
                 
-                # Configurar layers baseado no formato e template
-                format_type = payload.get('format', 'reels')
-                template_key = payload.get('template', 'feed_1_red')
-                title = payload.get('title', '')
-                subject = payload.get('subject', '')
-                credits = payload.get('credits', '')
+                # DEBUG: Logs para debugar
+                print(f"DEBUG - Arquivo salvo: {unique_filename}")
+                print(f"DEBUG - URL pública: {public_file_url}")
+                print(f"DEBUG - Template selecionado: {payload.get('template', 'N/A')}")
+                print(f"DEBUG - Formato: {payload.get('format', 'N/A')}")
                 
                 # Verificar se o template existe
                 if template_key not in PLACID_TEMPLATES:
@@ -1342,24 +1383,52 @@ def process_generate_post(payload, request):
                 layers = {
                     "imgprincipal": {
                         "image": public_file_url
-                    },
-                    "titulocopy": {
-                        "text": title
                     }
                 }
                 
-                # Adicionar layers específicos baseado no tipo de template
-                if template_type == 'feed':
-                    # Templates de Feed: credit, creditfoto, assuntext
+                # Debug: verificar template_type
+                print(f"Template selecionado: {template_key}, Tipo: {template_type}")
+                
+                # Usar o mesmo sistema do feed - modelo 1 (red) para todos os templates
+                # Apenas mudando os layers específicos de cada template
+                
+                if template_type == 'watermark':
+                    # Template de watermark: usar EXATAMENTE a mesma forma do feed - modelo 1 (red)
+                    print("Configurando layers para watermark: usando sistema IDÊNTICO ao feed")
+                    layers["titulocopy"] = {"text": title}
+                    if subject:
+                        layers["assuntext"] = {"text": subject}
+                    if credits:
+                        layers["creditfoto"] = {"text": f"FOTO: {credits}"}
+                    layers["credit"] = {"text": "Créditos gerais"}
+                elif template_type == 'feed':
+                    # Templates de Feed: usar sistema completo do feed - modelo 1 (red)
+                    print("Configurando layers para feed")
+                    layers["titulocopy"] = {"text": title}
                     if subject:
                         layers["assuntext"] = {"text": subject}
                     if credits:
                         layers["creditfoto"] = {"text": f"FOTO: {credits}"}
                     layers["credit"] = {"text": "Créditos gerais"}
                 elif template_type == 'story':
-                    # Templates de Story: imgfundo (fundo vermelho texturizado)
+                    # Templates de Story: usar sistema do feed + layers específicos
+                    print("Configurando layers para story")
+                    layers["titulocopy"] = {"text": title}
                     layers["imgfundo"] = {"image": "https://via.placeholder.com/1080x1920/FF0000/FFFFFF?text=FUNDO+VERMELHO"}
-                # Templates de Reels: mantém apenas imgprincipal e titulocopy
+                else:
+                    # Templates de Reels: usar sistema do feed + layers específicos
+                    print("Configurando layers para reels")
+                    layers["titulocopy"] = {"text": title}
+                
+                print(f"DEBUG - Layers finais: {layers}")
+                print(f"DEBUG - URL da imagem no layer imgprincipal: {layers.get('imgprincipal', {}).get('image', 'NÃO ENCONTRADA')}")
+                
+                # Verificar se o arquivo local existe
+                if os.path.exists(file_path):
+                    print(f"DEBUG - ✅ Arquivo local existe: {file_path}")
+                    print(f"DEBUG - ✅ Tamanho do arquivo: {os.path.getsize(file_path)} bytes")
+                else:
+                    print(f"DEBUG - ❌ Arquivo local NÃO existe: {file_path}")
                 
                 # Modificações baseadas no template selecionado
                 modifications = {
@@ -1372,7 +1441,9 @@ def process_generate_post(payload, request):
                 }
                 
                 # Criar imagem no Placid
-                print(f"Criando post no Placid com template: {template_uuid} ({PLACID_TEMPLATES[template_key]['name']})")
+                print(f"DEBUG - Criando post no Placid com template: {template_uuid} ({PLACID_TEMPLATES[template_key]['name']})")
+                print(f"DEBUG - Enviando para Placid - Layers: {layers}")
+                print(f"DEBUG - Enviando para Placid - Modifications: {modifications}")
                 image_result = create_placid_image(
                     template_uuid=template_uuid,
                     layers=layers,
@@ -1477,6 +1548,29 @@ def process_save_title(payload):
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
+
+@app.route('/post/<slug>')
+def post_image(slug):
+    """Serve a imagem mais recente para o slug do post"""
+    try:
+        # Buscar o arquivo mais recente na pasta uploads
+        files = os.listdir(UPLOAD_FOLDER)
+        if not files:
+            return "Nenhuma imagem encontrada", 404
+        
+        # Filtrar apenas arquivos de imagem
+        image_files = [f for f in files if f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif'))]
+        if not image_files:
+            return "Nenhuma imagem encontrada", 404
+        
+        # Pegar o arquivo mais recente
+        latest_file = max(image_files, key=lambda x: os.path.getctime(os.path.join(UPLOAD_FOLDER, x)))
+        
+        print(f"DEBUG - Servindo imagem para slug '{slug}': {latest_file}")
+        return send_from_directory(UPLOAD_FOLDER, latest_file)
+    except Exception as e:
+        print(f"Erro ao servir imagem para slug '{slug}': {e}")
+        return "Erro ao carregar imagem", 500
 
 if __name__ == '__main__':
     print("🚀 Iniciando SaaS Editor...")
