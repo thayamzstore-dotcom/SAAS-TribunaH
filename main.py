@@ -18,10 +18,11 @@ PLACID_API_URL = 'https://api.placid.app/api/rest/images'
 # Templates disponíveis
 PLACID_TEMPLATES = {
     'watermark': {
-        'uuid': 'qe0qo74vbrgxe',  # Usando o mesmo UUID do feed que funciona
+        'uuid': 'x9jxylt4vx2x0',  # UUID específico para watermark
         'name': 'Marca d\'Água',
         'description': 'Template para aplicar marca d\'água',
-        'type': 'watermark'
+        'type': 'watermark',
+        'dimensions': {'width': 1200, 'height': 1200}
     },
     'stories_1': {
         'uuid': 'g7wi0hogpxx5c',
@@ -92,7 +93,7 @@ def create_placid_image(template_uuid, layers, modifications=None, webhook_succe
     payload = {
         'template_uuid': template_uuid,
         'layers': layers,
-        'create_now': False
+        'create_now': True  # Criar imediatamente
     }
     
     if modifications:
@@ -772,6 +773,34 @@ HTML_TEMPLATE = """
             document.getElementById("slug-preview").textContent = `Link Sugerido: ${window.location.origin}/post/${slug}`;
         }
 
+        // Função para verificar status da imagem no Placid
+        async function checkImageStatus(imageId, type) {
+            try {
+                const response = await fetch(`/api/check-image/${imageId}`);
+                const result = await response.json();
+                
+                if (result.success && result.status === 'finished' && result.imageUrl) {
+                    generatedImageUrls[type] = result.imageUrl;
+                    const preview = document.getElementById(`${type}-preview`);
+                    preview.innerHTML = `<img src="${result.imageUrl}" style="max-width: 100%; max-height: 300px; border-radius: 10px;">`;
+                    showSuccess(`${type === 'watermark' ? 'Marca d\\'água' : 'Post'} finalizado com sucesso!`, type);
+                    const openButton = document.getElementById(`open-${type}-image`);
+                    if (openButton) {
+                        openButton.href = result.imageUrl;
+                        openButton.style.display = 'inline-block';
+                    }
+                } else if (result.success && result.status === 'processing') {
+                    // Continuar verificando a cada 3 segundos
+                    setTimeout(() => checkImageStatus(imageId, type), 3000);
+                } else {
+                    showError(`Erro ao processar ${type === 'watermark' ? 'marca d\\'água' : 'post'}.`, type);
+                }
+            } catch (error) {
+                console.error('Erro ao verificar status:', error);
+                showError(`Erro ao verificar status do ${type === 'watermark' ? 'watermark' : 'post'}.`, type);
+            }
+        }
+
         // Função para trocar abas
         function switchTab(tabName) {
             document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
@@ -874,20 +903,7 @@ HTML_TEMPLATE = """
                 return;
             }
             
-            // Validar campos obrigatórios igual ao feed
-            const titulo = document.getElementById('titulo').value;
-            const assunto = document.getElementById('assunto').value;
-            const creditos = document.getElementById('creditos').value;
-            
-            if (!titulo) {
-                showError('O título é obrigatório.', 'watermark');
-                return;
-            }
-            
-            if (!assunto || !creditos) {
-                showError('Para templates de watermark, assunto e nome do fotógrafo são obrigatórios.', 'watermark');
-                return;
-            }
+            // Watermark só precisa da imagem
             
             showLoading('watermark');
             
@@ -897,10 +913,7 @@ HTML_TEMPLATE = """
                 fileType: uploadedFiles.watermark.type,
                 fileName: uploadedFiles.watermark.name,
                 position: position,
-                transparency: transparency,
-                title: document.getElementById('titulo').value,
-                subject: document.getElementById('assunto').value,
-                credits: document.getElementById('creditos').value
+                transparency: transparency
             });
 
             hideLoading('watermark');
@@ -911,7 +924,11 @@ HTML_TEMPLATE = """
                     preview.innerHTML = `<img src="${apiResult.imageUrl}" style="max-width: 100%; max-height: 300px; border-radius: 10px;">`;
                     showSuccess('Marca d\\'água aplicada com sucesso!', 'watermark');
                     document.getElementById('open-watermark-image').href = apiResult.imageUrl;
-                    document.getElementById('open-watermark-image').style.display = 'inline-block';;
+                    document.getElementById('open-watermark-image').style.display = 'inline-block';
+                } else if (apiResult.imageId) {
+                    showSuccess('Marca d\\'água em processamento. Aguarde...', 'watermark');
+                    // Verificar status periodicamente
+                    checkImageStatus(apiResult.imageId, 'watermark');
                 } else {
                     showSuccess('Marca d\\\'água processada com sucesso!', 'watermark');
                 }
@@ -933,8 +950,8 @@ HTML_TEMPLATE = """
                 assuntoGroup.style.display = 'block';
                 creditosGroup.style.display = 'block';
             } else if (format === 'watermark') {
-                assuntoGroup.style.display = 'block';
-                creditosGroup.style.display = 'block';
+                assuntoGroup.style.display = 'none';
+                creditosGroup.style.display = 'none';
                 // Para watermark, selecionar automaticamente o template de watermark
                 selectTemplate('watermark');
             } else {
@@ -974,9 +991,9 @@ HTML_TEMPLATE = """
                 assuntoGroup.style.display = 'block';
                 creditosGroup.style.display = 'block';
             } else if (templateKey === 'watermark') {
-                // Template de watermark usa EXATAMENTE a mesma forma do feed
-                assuntoGroup.style.display = 'block';
-                creditosGroup.style.display = 'block';
+                // Template de watermark só precisa da imagem
+                assuntoGroup.style.display = 'none';
+                creditosGroup.style.display = 'none';
             } else {
                 // Templates de Story e Reels não precisam desses campos
                 assuntoGroup.style.display = 'none';
@@ -1035,6 +1052,10 @@ HTML_TEMPLATE = """
                     showSuccess('Post gerado com sucesso!', 'post');
                     document.getElementById('open-post-image').href = apiResult.imageUrl;
                     document.getElementById('open-post-image').style.display = 'inline-block';
+                } else if (apiResult.imageId) {
+                    showSuccess('Post em processamento. Aguarde...', 'post');
+                    // Verificar status periodicamente
+                    checkImageStatus(apiResult.imageId, 'post');
                 } else {
                     showSuccess('Post processado com sucesso!', 'post');
                 }
@@ -1267,22 +1288,10 @@ def process_watermark(payload, request):
                 template_type = template_info.get('type', 'watermark')
                 template_dimensions = template_info.get('dimensions', {'width': 1080, 'height': 1080})
                 
-                # Configurar layers - usar EXATAMENTE a mesma forma do feed - modelo 1 (red)
+                # Configurar layers - apenas imgprincipal para watermark
                 layers = {
                     "imgprincipal": {
                         "image": public_file_url
-                    },
-                    "titulocopy": {
-                        "text": payload.get('title', '')
-                    },
-                    "assuntext": {
-                        "text": payload.get('subject', '')
-                    },
-                    "creditfoto": {
-                        "text": f"FOTO: {payload.get('credits', '')}"
-                    },
-                    "credit": {
-                        "text": "Créditos gerais"
                     }
                 }
                 
@@ -1308,15 +1317,18 @@ def process_watermark(payload, request):
                     image_id = image_result.get('id')
                     print(f"Watermark criado com ID: {image_id}")
                     
-                    # Aguardar conclusão (mesma lógica dos outros templates)
-                    final_image = poll_placid_image_status(image_id)
-                    if final_image and final_image.get('image_url'):
+                    # Verificar se a imagem já está pronta (create_now: True)
+                    if image_result.get('image_url'):
                         response_data['success'] = True
-                        response_data['imageUrl'] = final_image['image_url']
+                        response_data['imageUrl'] = image_result['image_url']
                         response_data['message'] = "Marca d'água aplicada com sucesso!"
-                        print(f"Watermark finalizado: {final_image['image_url']}")
+                        print(f"Watermark finalizado: {image_result['image_url']}")
                     else:
-                        response_data['message'] = "Erro ao processar watermark no Placid"
+                        # Se não estiver pronta, retornar o ID para verificação posterior
+                        response_data['success'] = True
+                        response_data['imageId'] = image_id
+                        response_data['message'] = "Watermark em processamento. Use o ID para verificar status."
+                        print(f"Watermark em processamento: {image_id}")
                 else:
                     response_data['message'] = "Erro ao criar watermark no Placid"
                     
@@ -1454,15 +1466,18 @@ def process_generate_post(payload, request):
                     image_id = image_result.get('id')
                     print(f"Post criado com ID: {image_id}")
                     
-                    # Aguardar conclusão
-                    final_image = poll_placid_image_status(image_id)
-                    if final_image and final_image.get('image_url'):
+                    # Verificar se a imagem já está pronta (create_now: True)
+                    if image_result.get('image_url'):
                         response_data['success'] = True
-                        response_data['imageUrl'] = final_image['image_url']
+                        response_data['imageUrl'] = image_result['image_url']
                         response_data['message'] = "Post gerado com sucesso!"
-                        print(f"Post finalizado: {final_image['image_url']}")
+                        print(f"Post finalizado: {image_result['image_url']}")
                     else:
-                        response_data['message'] = "Erro ao processar post no Placid"
+                        # Se não estiver pronta, retornar o ID para verificação posterior
+                        response_data['success'] = True
+                        response_data['imageId'] = image_id
+                        response_data['message'] = "Post em processamento. Use o ID para verificar status."
+                        print(f"Post em processamento: {image_id}")
                 else:
                     response_data['message'] = "Erro ao criar post no Placid"
                     
@@ -1571,6 +1586,37 @@ def post_image(slug):
     except Exception as e:
         print(f"Erro ao servir imagem para slug '{slug}': {e}")
         return "Erro ao carregar imagem", 500
+
+@app.route('/api/check-image/<image_id>')
+def check_image_status(image_id):
+    """Verifica o status de uma imagem no Placid"""
+    try:
+        image_data = get_placid_image(image_id)
+        if not image_data:
+            return jsonify({"success": False, "message": "Imagem não encontrada"}), 404
+        
+        status = image_data.get('status')
+        if status == 'finished' and image_data.get('image_url'):
+            return jsonify({
+                "success": True,
+                "status": "finished",
+                "imageUrl": image_data['image_url']
+            })
+        elif status == 'error':
+            return jsonify({
+                "success": False,
+                "status": "error",
+                "message": "Erro ao processar imagem"
+            })
+        else:
+            return jsonify({
+                "success": True,
+                "status": "processing",
+                "message": "Imagem ainda em processamento"
+            })
+    except Exception as e:
+        print(f"Erro ao verificar status da imagem {image_id}: {e}")
+        return jsonify({"success": False, "message": f"Erro: {e}"}), 500
 
 if __name__ == '__main__':
     print("🚀 Iniciando SaaS Editor...")
