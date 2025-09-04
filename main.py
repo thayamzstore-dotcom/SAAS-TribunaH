@@ -60,7 +60,7 @@ PLACID_TEMPLATES = {
         'dimensions': {'width': 1200, 'height': 1200}
     },
     'watermark1': {
-        'uuid': 'an1vhwhytqnpe',
+        'uuid': '1wubmwdwwturf',
         'name': 'Watermark1',
         'description': 'Template para Watermark',
         'type': 'feed',
