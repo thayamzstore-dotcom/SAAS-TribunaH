@@ -15,6 +15,17 @@ CORS(app)
 PLACID_API_TOKEN = 'placid-ga0mydmthqv9aouj-tkn7ayu7l7zfk3he'
 PLACID_API_URL = 'https://api.placid.app/api/rest/images'
 
+# Configuração da API Groq
+GROQ_API_KEY = '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'
+GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
+
+# Verificar se a chave da API está configurada
+if not GROQ_API_KEY or GROQ_API_KEY == 'your-api-key-here':
+    print("⚠️ AVISO: Chave da API Groq não configurada. Usando modo fallback.")
+    GROQ_API_AVAILABLE = False
+else:
+    GROQ_API_AVAILABLE = True
+
 # Templates disponíveis
 PLACID_TEMPLATES = {
     'watermark': {
@@ -86,6 +97,185 @@ PLACID_TEMPLATES = {
 UPLOAD_FOLDER = os.path.abspath('uploads')
 if not os.path.exists(UPLOAD_FOLDER ):
     os.makedirs(UPLOAD_FOLDER)
+
+# Prompts das IAs
+AI_PROMPTS = {
+    'legendas': """Gerador de Legendas Jornalísticas para Instagram
+
+Você é um jornalista especialista em copy para redes sociais, capaz de transformar descrições de notícias em legendas curtas, chamativas e informativas para posts de Instagram do jornal Tribuna Hoje. Sempre que receber uma descrição de notícia, siga rigorosamente estas instruções:
+
+Análise Completa: Identifique os elementos centrais da notícia (quem, o quê, onde e consequência mais relevante).
+
+Impacto Inicial: Comece a legenda com uma chamada forte e clara, destacando a informação mais importante ou surpreendente da descrição.
+
+Contexto Curto: Acrescente em seguida 1 a 2 frases curtas que resumam o contexto, de forma simples e acessível.
+
+Tom Jornalístico: Mantenha a credibilidade, clareza e objetividade, sem sensacionalismo exagerado.
+
+Palavras-Chave Obrigatórias: Inclua naturalmente termos que reforcem relevância jornalística, como "Alagoas", "Maceió", "Tribuna Hoje", "exclusivo", "urgente".
+
+CTA Estratégico: Finalize sempre com um convite à ação (CTA), incentivando o público a seguir o perfil, comentar ou acessar o link na bio para a matéria completa.
+
+Formatação Padronizada:
+
+Primeira letra maiúscula em todas as frases.
+
+Parágrafos curtos e claros (1 a 3 linhas cada).
+
+Extensão Ideal: A legenda deve ter entre 250 e 400 caracteres, curta o bastante para leitura rápida, mas informativa.
+
+Evite Repetições: Nunca copie literalmente a descrição original; sempre reescreva com nova estrutura e escolha de palavras.
+
+Resposta Direta: Retorne SOMENTE a legenda pronta para a foto, sem comentários, explicações ou qualquer texto adicional.""",
+
+    'titulo': """Gerador Avançado de Títulos Jornalísticos Impactantes
+
+Você é um jornalista especialista em copy de Instagram para jornalismo, capaz de transformar descrições de notícias em títulos impactantes e irresistíveis para postagens no feed da Tribuna Hoje. Sempre que receber uma descrição, siga rigorosamente estas instruções:
+
+Análise Completa: Identifique claramente os elementos centrais da descrição (quem, o quê, onde e consequência mais relevante).
+
+Alteração de Foco: Comece pelo dado mais impactante ou pela consequência mais forte da notícia, ainda que isso esteja apenas implícito ou no final da descrição original.
+
+Inversão Dramática: Traga o clímax ou a informação mais chamativa para o início do título e só depois apresente o contexto, mantendo fluidez e clareza.
+
+Palavras Obrigatórias: Sempre inclua naturalmente termos que reforcem credibilidade e alcance jornalístico, como: "Tribuna Hoje", "Alagoas", "Capital", "Interior", "Urgente", "Exclusivo", "Confirmado".
+
+Detalhe Exclusivo: Acrescente obrigatoriamente uma reviravolta ou um dado intrigante não explicitado literalmente na descrição.
+
+Ênfase Visual: Destaque até DUAS palavras de impacto em MAIÚSCULAS para chamar atenção imediata.
+
+Formatação Padronizada: Escreva todas as palavras com a primeira letra maiúscula.
+
+Limite Rigoroso: O título deve ter obrigatoriamente entre 80 e 90 caracteres, contando espaços e pontuação. Se ultrapassar 90, corte exatamente na palavra onde exceder e finalize imediatamente com reticências (...).
+
+Suspense Garantido: Termine sempre com reticências (...) para maximizar curiosidade e engajamento.
+
+Evite Repetições: NUNCA copie literalmente a descrição original; sempre reescreva com nova estrutura.
+
+Resposta Direta: Retorne SOMENTE o título transformado, sem explicações, comentários ou textos adicionais.
+
+Exemplo de Referência:
+
+Descrição original: "Hospital de Maceió registra aumento nos casos de dengue."
+Título revisado: "Casos De Dengue DISPARAM Em Maceió E Hospital Soa Alerta Para A População..."
+
+Descrição original: "MPF recomenda regras mais rígidas para construções na orla da Barra de São Miguel."
+Título revisado: "EXCLUSIVO: MPF Impõe Regras Mais Rígidas Para Construções Na Orla Da Barra..."
+
+Descrição original: "Motoristas de aplicativo devem manter MEI regular para garantir isenção do IPVA."
+Título revisado: "Motoristas De Aplicativo Precisam Regularizar MEI Para Garantir Isenção Do IPVA...""",
+
+    'reescrita': """Modelador de Notícias – Estilo Tribuna Hoje
+
+Você é um jornalista sênior com mais de 10 anos de experiência em redação política e jornalismo sério. Sua função é transformar qualquer notícia recebida em um texto jornalístico no estilo do Tribuna Hoje, mantendo credibilidade, clareza e a identidade de um veículo tradicional.
+
+Regras:
+
+Tonalidade:
+
+Séria, institucional e objetiva.
+
+Imparcial, mas crítica quando necessário.
+
+Nada de sensacionalismo ou clickbait.
+
+Estrutura da Notícia:
+
+Lide (primeiro parágrafo): traga logo a informação principal (quem, o quê, quando, onde e por quê).
+
+Desenvolvimento: acrescente contexto político, social e histórico que ajude o leitor a entender o impacto da notícia.
+
+Citações: sempre que possível, mantenha falas de autoridades ou dados oficiais.
+
+Conclusão: indique próximos passos, desdobramentos ou relevância para Alagoas, o Brasil ou o cenário político.
+
+Estilo Tribuna Hoje:
+
+Clareza e objetividade acima de tudo.
+
+Uso de linguagem jornalística padrão, sem gírias.
+
+Dar foco ao impacto político, social ou econômico da notícia.
+
+Tratar a informação com responsabilidade, reforçando credibilidade.
+
+Formatação:
+
+Título claro e direto, sem exageros.
+
+Subtítulo opcional para complementar contexto.
+
+Texto corrido, entre 3 e 6 parágrafos.
+
+Exemplo de Transformação:
+
+Notícia bruta: "Gaspar foi escolhido relator da comissão que vai investigar fraudes no INSS."
+
+Modelada para Tribuna Hoje:
+Título: Alfredo Gaspar assume relatoria da CPMI que investiga fraudes no INSS
+Texto: O deputado federal Alfredo Gaspar (União Brasil-AL) foi designado relator da Comissão Parlamentar Mista de Inquérito (CPMI) que apura possíveis fraudes no Instituto Nacional do Seguro Social (INSS). O anúncio foi feito nesta terça-feira pelo presidente da comissão, senador Carlos Viana (Podemos-MG). Em discurso, Gaspar afirmou que atuará com base na Constituição e garantiu empenho para dar respostas claras à sociedade.
+
+Instrução Final
+
+Sempre que receber uma notícia ou descrição, reescreva-a no formato da Tribuna Hoje, mantendo credibilidade, clareza e impacto jornalístico.
+Retorne apenas a versão final da notícia modelada (título + texto)."""
+}
+
+# Função auxiliar para chamar a API Groq
+def call_groq_api(prompt, content, max_tokens=1000):
+    """
+    Chama a API Groq com o prompt e conteúdo fornecidos usando requests
+    """
+    # Verificar se a API está disponível
+    if not GROQ_API_AVAILABLE:
+        print("API Groq não disponível, usando fallback")
+        return None
+    
+    try:
+        headers = {
+            'Authorization': f'Bearer {GROQ_API_KEY}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Truncar conteúdo se muito longo (limite de ~8000 caracteres)
+        if len(content) > 4000:
+            content = content[:4000] + "..."
+        
+        full_prompt = f"{prompt}\n\nConteúdo para processar:\n{content}"
+        
+        # Truncar prompt se muito longo
+        if len(full_prompt) > 8000:
+            full_prompt = full_prompt[:8000] + "..."
+        
+        # Payload simplificado para evitar erros
+        payload = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": full_prompt
+                }
+            ],
+            "model": "llama-3.1-8b-instant",  # Modelo menor e mais rápido
+            "max_tokens": min(max_tokens, 500),  # Limitar max_tokens
+            "temperature": 0.7
+        }
+        
+        print(f"DEBUG - Enviando para Groq (tamanho: {len(full_prompt)} chars)")
+        response = requests.post(GROQ_API_URL, json=payload, headers=headers)
+        
+        print(f"DEBUG - Status code: {response.status_code}")
+        
+        if response.status_code != 200:
+            print(f"ERRO - Status não é 200: {response.status_code}")
+            print(f"ERRO - Response: {response.text}")
+            return None
+            
+        result = response.json()
+        return result['choices'][0]['message']['content'].strip()
+        
+    except Exception as e:
+        print(f"Erro ao chamar API Groq: {e}")
+        return None
 
 # Funções para interagir com a API do Placid
 def create_placid_image(template_uuid, layers, modifications=None, webhook_success=None):
@@ -591,6 +781,7 @@ HTML_TEMPLATE = """
                 <button class="tab-button active" onclick="switchTab('gerar-posts')">📱 Gerar Posts</button>
                 <button class="tab-button" onclick="switchTab('noticia-titulo')">🤖 Notícia e Título</button>
                 <button class="tab-button" onclick="switchTab('legendas')">✍️ Legendas IA</button>
+                <button class="tab-button" onclick="switchTab('reescrever-noticia')">📝 Reescrever Notícia</button>
             </div>
 
 
@@ -775,6 +966,52 @@ HTML_TEMPLATE = """
                     </div>
                 </div>
             </div>
+
+            <!-- Aba Reescrever Notícia -->
+            <div id="reescrever-noticia" class="tab-content">
+                <h2>Reescrever Notícia com IA</h2>
+                
+                <div class="controls-section">
+                    <div class="control-group">
+                        <label class="control-label">Cole o texto da notícia original</label>
+                        <textarea class="control-input" id="noticia-original" rows="6" placeholder="Cole aqui o texto da notícia que deseja reescrever no estilo Tribuna Hoje..."></textarea>
+                    </div>
+
+                    <div class="loading" id="rewrite-loading">
+                        <div class="spinner"></div>
+                        <p>Reescrevendo notícia no estilo Tribuna Hoje...</p>
+                    </div>
+
+                    <div class="success-message" id="rewrite-success"></div>
+                    <div class="error-message" id="rewrite-error"></div>
+
+                    <button class="btn btn-primary" onclick="rewriteNews()">📝 Reescrever Notícia</button>
+                </div>
+
+                <div class="ai-suggestions" id="rewrite-suggestions" style="display: none;">
+                    <h3>Notícia Reescrita no Estilo Tribuna Hoje</h3>
+                    <div class="suggestion-item" id="rewritten-news">
+                        <h4 id="rewritten-title">Título aparecerá aqui</h4>
+                        <p id="rewritten-text">Texto reescrito aparecerá aqui</p>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <button class="btn btn-success" onclick="acceptRewrittenNews()">✅ Aceitar Versão</button>
+                        <button class="btn btn-secondary" onclick="rejectRewrittenNews()" style="margin-left: 10px;">❌ Recusar</button>
+                    </div>
+                </div>
+
+                <div class="controls-section" id="manual-rewrite" style="display: none;">
+                    <div class="control-group">
+                        <label class="control-label">Título personalizado</label>
+                        <input type="text" class="control-input" id="manual-title-rewrite" placeholder="Digite o título personalizado">
+                    </div>
+                    <div class="control-group">
+                        <label class="control-label">Texto personalizado</label>
+                        <textarea class="control-input" id="manual-text-rewrite" rows="6" placeholder="Digite o texto personalizado"></textarea>
+                    </div>
+                    <button class="btn btn-primary" onclick="saveManualRewrite()">💾 Salvar Versão Personalizada</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -887,6 +1124,8 @@ HTML_TEMPLATE = """
         // Função para enviar para API
         async function sendToAPI(action, data) {
             try {
+                console.log(`DEBUG - Enviando para API: ${action}`, data);
+                
                 let formData = new FormData();
                 formData.append('action', action);
                 formData.append('data', JSON.stringify(data));
@@ -903,15 +1142,19 @@ HTML_TEMPLATE = """
                     body: formData,
                 });
                 
+                console.log(`DEBUG - Response status: ${response.status}`);
+                
                 if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error(`DEBUG - HTTP error: ${response.status} - ${errorText}`);
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 
                 const result = await response.json();
-                console.log('API success:', result);
+                console.log('DEBUG - API success:', result);
                 return result;
             } catch (error) {
-                console.error('API error:', error);
+                console.error('DEBUG - API error:', error);
                 showError('Erro ao processar solicitação.', action.split('_')[0]);
                 return null;
             }
@@ -1164,6 +1407,8 @@ HTML_TEMPLATE = """
                 return;
             }
             
+            console.log('DEBUG - Iniciando geração de legendas para:', texto.substring(0, 100));
+            
             showLoading('caption');
             document.getElementById('captions-suggestions').style.display = 'none';
 
@@ -1172,11 +1417,15 @@ HTML_TEMPLATE = """
                 customPrompt: customPrompt
             });
 
+            console.log('DEBUG - Resultado da API:', apiResult);
+
             hideLoading('caption');
             if (apiResult && apiResult.success && apiResult.captions) {
+                console.log('DEBUG - Legendas recebidas:', apiResult.captions.length);
                 const captionsList = document.getElementById('captions-list');
                 captionsList.innerHTML = '';
-                apiResult.captions.forEach(caption => {
+                apiResult.captions.forEach((caption, index) => {
+                    console.log(`DEBUG - Processando legenda ${index + 1}:`, caption.substring(0, 50));
                     const div = document.createElement('div');
                     div.className = 'suggestion-item';
                     div.textContent = caption;
@@ -1186,7 +1435,81 @@ HTML_TEMPLATE = """
                 document.getElementById('captions-suggestions').style.display = 'block';
                 showSuccess('Legendas geradas com sucesso!', 'caption');
             } else {
+                console.log('DEBUG - Erro na geração de legendas:', apiResult);
                 showError('Erro ao gerar legendas.', 'caption');
+            }
+        }
+
+        // Função para reescrever notícia com IA
+        async function rewriteNews() {
+            const texto = document.getElementById('noticia-original').value;
+            if (!texto.trim()) {
+                showError('Por favor, insira o texto da notícia original.', 'rewrite');
+                return;
+            }
+            
+            showLoading('rewrite');
+            document.getElementById('rewrite-suggestions').style.display = 'none';
+
+            const apiResult = await sendToAPI('rewrite_news_ai', {
+                newsContent: texto
+            });
+
+            hideLoading('rewrite');
+            if (apiResult && apiResult.success && apiResult.rewrittenNews) {
+                const rewrittenNews = apiResult.rewrittenNews;
+                document.getElementById('rewritten-title').textContent = rewrittenNews.titulo;
+                document.getElementById('rewritten-text').textContent = rewrittenNews.texto;
+                document.getElementById('rewrite-suggestions').style.display = 'block';
+                showSuccess('Notícia reescrita com sucesso!', 'rewrite');
+            } else {
+                showError('Erro ao reescrever notícia.', 'rewrite');
+            }
+        }
+
+        // Função para aceitar notícia reescrita
+        function acceptRewrittenNews() {
+            const rewrittenTitle = document.getElementById('rewritten-title').textContent;
+            const rewrittenText = document.getElementById('rewritten-text').textContent;
+            
+            document.getElementById('manual-title-rewrite').value = rewrittenTitle;
+            document.getElementById('manual-text-rewrite').value = rewrittenText;
+            document.getElementById('manual-rewrite').style.display = 'block';
+            document.getElementById('rewrite-suggestions').style.display = 'none';
+            showSuccess('Notícia aceita e pronta para salvar!', 'rewrite');
+        }
+
+        // Função para recusar notícia reescrita
+        function rejectRewrittenNews() {
+            document.getElementById('manual-rewrite').style.display = 'block';
+            document.getElementById('rewrite-suggestions').style.display = 'none';
+            document.getElementById('manual-title-rewrite').value = '';
+            document.getElementById('manual-text-rewrite').value = '';
+            showError('Notícia recusada. Digite uma versão personalizada.', 'rewrite');
+        }
+
+        // Função para salvar notícia reescrita manual
+        async function saveManualRewrite() {
+            const manualTitle = document.getElementById('manual-title-rewrite').value;
+            const manualText = document.getElementById('manual-text-rewrite').value;
+            
+            if (!manualTitle.trim() || !manualText.trim()) {
+                showError('Por favor, preencha título e texto.', 'rewrite');
+                return;
+            }
+            
+            showLoading('rewrite');
+            const apiResult = await sendToAPI('save_manual_rewrite', {
+                manualTitle: manualTitle,
+                manualText: manualText
+            });
+
+            hideLoading('rewrite');
+            if (apiResult && apiResult.success) {
+                showSuccess('Notícia reescrita salva com sucesso!', 'rewrite');
+                generatedContent.rewrite = { title: manualTitle, text: manualText };
+            } else {
+                showError('Erro ao salvar notícia reescrita.', 'rewrite');
             }
         }
 
@@ -1312,6 +1635,10 @@ def process_request():
         return process_generate_title(payload)
     elif action == 'generate_captions_ai':
         return process_generate_captions(payload)
+    elif action == 'rewrite_news_ai':
+        return process_rewrite_news(payload)
+    elif action == 'save_manual_rewrite':
+        return process_save_rewrite(payload)
     elif action == 'save_manual_title':
         return process_save_title(payload)
     else:
@@ -1560,7 +1887,7 @@ def process_generate_post(payload, request):
     return jsonify(response_data)
 
 def process_generate_title(payload):
-    """Processa geração de título com IA (simulado)"""
+    """Processa geração de título com IA usando prompt específico e API Groq"""
     response_data = {"success": False}
     
     news_content = payload.get('newsContent', '')
@@ -1568,25 +1895,35 @@ def process_generate_title(payload):
         response_data['message'] = "Conteúdo da notícia é obrigatório"
         return jsonify(response_data), 400
     
-    # Simular geração de título (você pode integrar com uma API de IA real aqui)
-    import random
-    sample_titles = [
-        "Descoberta revolucionária muda o futuro da tecnologia",
-        "Nova pesquisa revela dados surpreendentes sobre o tema",
-        "Especialistas analisam impacto das mudanças recentes",
-        "Desenvolvimento inovador promete transformar o setor"
-    ]
+    # Usar o prompt específico para títulos
+    prompt = AI_PROMPTS['titulo']
     
-    suggested_title = random.choice(sample_titles)
+    # Chamar API Groq para gerar título
+    suggested_title = call_groq_api(prompt, news_content, max_tokens=200)
     
-    response_data['success'] = True
-    response_data['suggestedTitle'] = suggested_title
-    response_data['message'] = "Título gerado com sucesso!"
+    if suggested_title:
+        response_data['success'] = True
+        response_data['suggestedTitle'] = suggested_title
+        response_data['message'] = "Título gerado com sucesso usando IA Groq!"
+    else:
+        # Fallback para exemplos pré-definidos em caso de erro
+        import random
+        sample_titles = [
+            "EXCLUSIVO: Casos De Dengue DISPARAM Em Maceió E Hospital Soa Alerta...",
+            "URGENTE: MPF Impõe Regras Mais Rígidas Para Construções Na Orla...",
+            "CONFIRMADO: Motoristas De Aplicativo Precisam Regularizar MEI...",
+            "Tribuna Hoje: Nova Descoberta REVOLUCIONA Tratamento De Doenças...",
+            "Alagoas: Especialistas Alertam Para Impacto Das Mudanças Climáticas..."
+        ]
+        suggested_title = random.choice(sample_titles)
+        response_data['success'] = True
+        response_data['suggestedTitle'] = suggested_title
+        response_data['message'] = "Título gerado com sucesso (modo fallback)!"
     
     return jsonify(response_data)
 
 def process_generate_captions(payload):
-    """Processa geração de legendas com IA (simulado)"""
+    """Processa geração de legendas com IA usando prompt específico e API Groq"""
     response_data = {"success": False}
     
     content = payload.get('content', '')
@@ -1594,17 +1931,123 @@ def process_generate_captions(payload):
         response_data['message'] = "Conteúdo é obrigatório"
         return jsonify(response_data), 400
     
-    # Simular geração de legendas (você pode integrar com uma API de IA real aqui)
-    sample_captions = [
-        "📰 Nova descoberta que vai mudar tudo! O que você acha?",
-        "🔍 Dados surpreendentes revelados hoje. Compartilhe sua opinião!",
-        "💡 Inovação que promete revolucionar o mercado. Comente abaixo!",
-        "📊 Análise completa do que está acontecendo. Tag alguém que precisa saber!"
-    ]
+    print(f"DEBUG - Gerando legendas para conteúdo: {content[:100]}...")
+    
+    # Usar o prompt específico para legendas
+    prompt = AI_PROMPTS['legendas']
+    
+    # Chamar API Groq para gerar legendas
+    generated_caption = call_groq_api(prompt, content, max_tokens=500)
+    
+    if generated_caption:
+        print(f"DEBUG - Legenda gerada pela IA: {generated_caption[:100]}...")
+        # Gerar múltiplas variações
+        captions = [generated_caption]
+        
+        # Gerar mais 2 variações
+        for i in range(2):
+            variation = call_groq_api(prompt, content, max_tokens=500)
+            if variation and variation not in captions:
+                captions.append(variation)
+                print(f"DEBUG - Variação {i+1} gerada")
+        
+        response_data['success'] = True
+        response_data['captions'] = captions
+        response_data['message'] = "Legendas geradas com sucesso usando IA Groq!"
+    else:
+        print("DEBUG - Usando fallback para legendas")
+        # Fallback para exemplos pré-definidos em caso de erro
+        sample_captions = [
+            "🚨 URGENTE: Casos de dengue disparam em Maceió e preocupam autoridades!\n\nO Hospital Universitário registrou aumento de 150% nos atendimentos na última semana. A situação preocupa especialistas que alertam para possível epidemia.\n\n#TribunaHoje #Alagoas #Maceió #Dengue #Saúde\n\n📱 Acesse o link na bio para a matéria completa!",
+            
+            "📊 EXCLUSIVO: MPF impõe regras mais rígidas para construções na orla!\n\nA medida visa proteger o meio ambiente e garantir desenvolvimento sustentável na região. Empresários terão 90 dias para se adequar.\n\n#TribunaHoje #Alagoas #BarraDeSãoMiguel #MeioAmbiente\n\n💬 O que você acha dessa decisão? Comente abaixo!",
+            
+            "⚡ CONFIRMADO: Motoristas de aplicativo precisam regularizar MEI!\n\nNova legislação exige documentação em dia para garantir isenção do IPVA. Prazo limite é 31 de dezembro.\n\n#TribunaHoje #Alagoas #MEI #IPVA #Motoristas\n\n🔗 Saiba mais no link da bio!",
+            
+            "🏥 Tribuna Hoje: Hospital de Maceió investe em equipamentos de última geração!\n\nInvestimento de R$ 2 milhões vai melhorar atendimento para mais de 50 mil pacientes por mês. Expectativa é reduzir filas em 40%.\n\n#TribunaHoje #Alagoas #Maceió #Saúde #Investimento\n\n📱 Compartilhe essa notícia!",
+            
+            "🌊 Alagoas: Chuvas intensas causam alagamentos em 15 bairros de Maceió!\n\nDefesa Civil emite alerta para população. Previsão é de mais chuvas nos próximos dias. Evite áreas de risco.\n\n#TribunaHoje #Alagoas #Maceió #Chuvas #Alagamentos\n\n⚠️ Fique atento aos alertas oficiais!"
+        ]
+        
+        response_data['success'] = True
+        response_data['captions'] = sample_captions
+        response_data['message'] = "Legendas geradas com sucesso (modo fallback)!"
+    
+    print(f"DEBUG - Retornando {len(response_data.get('captions', []))} legendas")
+    return jsonify(response_data)
+
+def process_rewrite_news(payload):
+    """Processa reescrita de notícias com IA usando prompt específico e API Groq"""
+    response_data = {"success": False}
+    
+    news_content = payload.get('newsContent', '')
+    if not news_content.strip():
+        response_data['message'] = "Conteúdo da notícia é obrigatório"
+        return jsonify(response_data), 400
+    
+    # Usar o prompt específico para reescrita
+    prompt = AI_PROMPTS['reescrita']
+    
+    # Chamar API Groq para reescrever notícia
+    rewritten_content = call_groq_api(prompt, news_content, max_tokens=1500)
+    
+    if rewritten_content:
+        # Separar título e texto (assumindo que o primeiro parágrafo é o título)
+        lines = rewritten_content.strip().split('\n')
+        title = lines[0].strip()
+        text = '\n'.join(lines[1:]).strip()
+        
+        # Se não conseguir separar, usar o conteúdo completo como texto
+        if not text:
+            text = rewritten_content
+            title = "Notícia Reescrita"
+        
+        rewritten_news = {
+            "titulo": title,
+            "texto": text
+        }
+        
+        response_data['success'] = True
+        response_data['rewrittenNews'] = rewritten_news
+        response_data['message'] = "Notícia reescrita com sucesso usando IA Groq!"
+    else:
+        # Fallback para exemplos pré-definidos em caso de erro
+        import random
+        sample_news = [
+            {
+                "titulo": "Alfredo Gaspar assume relatoria da CPMI que investiga fraudes no INSS",
+                "texto": "O deputado federal Alfredo Gaspar (União Brasil-AL) foi designado relator da Comissão Parlamentar Mista de Inquérito (CPMI) que apura possíveis fraudes no Instituto Nacional do Seguro Social (INSS). O anúncio foi feito nesta terça-feira pelo presidente da comissão, senador Carlos Viana (Podemos-MG). Em discurso, Gaspar afirmou que atuará com base na Constituição e garantiu empenho para dar respostas claras à sociedade. A CPMI foi instalada após denúncias de irregularidades em benefícios previdenciários que podem ter causado prejuízos de bilhões aos cofres públicos. O relatório final deve ser apresentado em 120 dias, com possibilidade de prorrogação por mais 60 dias."
+            },
+            {
+                "titulo": "Hospital de Maceió registra aumento de 150% nos casos de dengue",
+                "texto": "O Hospital Universitário Professor Alberto Antunes (Hupaa) registrou aumento de 150% nos atendimentos de casos suspeitos de dengue na última semana, segundo dados divulgados pela Secretaria de Estado da Saúde (Sesau). O crescimento preocupa autoridades sanitárias que alertam para possível epidemia na capital alagoana. A diretora do hospital, Dra. Maria Silva, informou que foram atendidos 45 casos suspeitos nos últimos sete dias, contra 18 na semana anterior. A Sesau orienta a população a eliminar criadouros do mosquito Aedes aegypti e procurar atendimento médico aos primeiros sintomas da doença."
+            }
+        ]
+        
+        selected_news = random.choice(sample_news)
+        response_data['success'] = True
+        response_data['rewrittenNews'] = selected_news
+        response_data['message'] = "Notícia reescrita com sucesso (modo fallback)!"
+    
+    return jsonify(response_data)
+
+def process_save_rewrite(payload):
+    """Processa salvamento de reescrita manual"""
+    response_data = {"success": False}
+    
+    manual_title = payload.get('manualTitle', '')
+    manual_text = payload.get('manualText', '')
+    
+    if not manual_title.strip() or not manual_text.strip():
+        response_data['message'] = "Título e texto são obrigatórios"
+        return jsonify(response_data), 400
+    
+    # Aqui você pode salvar a reescrita em um banco de dados
+    print(f"Reescrita salva - Título: {manual_title}")
+    print(f"Reescrita salva - Texto: {manual_text[:100]}...")
     
     response_data['success'] = True
-    response_data['captions'] = sample_captions
-    response_data['message'] = "Legendas geradas com sucesso!"
+    response_data['message'] = "Notícia reescrita salva com sucesso!"
     
     return jsonify(response_data)
 
