@@ -12,7 +12,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Configuração da API do Placid
-PLACID_API_TOKEN = 'placid-ga0mydmthqv9aouj-tkn7ayu7l7zfk3he'
+PLACID_API_TOKEN = 'placid-3wvhjeuwarxmpfwq-cvjl621m7zlcjafp'
 PLACID_API_URL = 'https://api.placid.app/api/rest/images'
 
 # Configuração da API Groq
@@ -43,7 +43,7 @@ PLACID_TEMPLATES = {
         'dimensions': {'width': 1080, 'height': 1920}
     },
     'reels_feed_2': {
-        'uuid': 'ltgftf7ybxcqb',
+        'uuid': 'lqw8eihb6mirk',
         'name': 'Reels Feed - Modelo 2',
         'description': 'Template para Reels e Feed',
         'type': 'reels',
@@ -940,17 +940,13 @@ HTML_TEMPLATE = """
                 
                 <div class="controls-section">
                     <div class="control-group">
-                        <label class="control-label">Notícia, resumo ou link</label>
-                        <textarea class="control-input" id="legenda-texto" rows="4" placeholder="Cole o conteúdo para gerar legendas..."></textarea>
-                    </div>
-                    <div class="control-group">
-                        <label class="control-label">Prompt personalizado (opcional)</label>
-                        <input type="text" class="control-input" id="custom-prompt" placeholder="Ex: Gere legendas informais e engajantes">
+                        <label class="control-label">Cole o texto da notícia ou link</label>
+                        <textarea class="control-input" id="legenda-texto" rows="6" placeholder="Cole aqui o texto da notícia ou o link para análise..."></textarea>
                     </div>
 
-                    <div class="loading" id="captions-loading">
+                    <div class="loading" id="caption-loading">
                         <div class="spinner"></div>
-                        <p>Gerando legendas personalizadas...</p>
+                        <p>Analisando conteúdo e gerando legendas...</p>
                     </div>
 
                     <div class="success-message" id="caption-success"></div>
@@ -959,11 +955,23 @@ HTML_TEMPLATE = """
                     <button class="btn btn-primary" onclick="generateCaptions()">🤖 Gerar Legendas</button>
                 </div>
 
-                <div class="ai-suggestions" id="captions-suggestions" style="display: none;">
-                    <h3>Legendas Sugeridas (clique para copiar)</h3>
-                    <div id="captions-list">
-                        <!-- Legendas serão inseridas aqui dinamicamente -->
+                <div class="ai-suggestions" id="caption-suggestions" style="display: none;">
+                    <h3>Legenda Sugerida pela IA</h3>
+                    <div class="suggestion-item" id="suggested-caption">
+                        <p><strong>Legenda sugerida aparecerá aqui</strong></p>
                     </div>
+                    <div style="margin-top: 15px;">
+                        <button class="btn btn-success" onclick="acceptCaption()">✅ Aceitar Sugestão</button>
+                        <button class="btn btn-secondary" onclick="rejectCaption()" style="margin-left: 10px;">❌ Recusar</button>
+                    </div>
+                </div>
+
+                <div class="controls-section" id="manual-caption" style="display: none;">
+                    <div class="control-group">
+                        <label class="control-label">Digite a legenda manualmente</label>
+                        <textarea class="control-input" id="manual-caption-input" rows="4" placeholder="Digite sua legenda personalizada"></textarea>
+                    </div>
+                    <button class="btn btn-primary" onclick="saveManualCaption()">💾 Salvar Legenda</button>
                 </div>
             </div>
 
@@ -1400,43 +1408,77 @@ HTML_TEMPLATE = """
 
         // Função para gerar legendas com IA
         async function generateCaptions() {
+            console.log('DEBUG - Iniciando geração de legendas');
             const texto = document.getElementById('legenda-texto').value;
-            const customPrompt = document.getElementById('custom-prompt').value;
+            console.log('DEBUG - Texto capturado:', texto.substring(0, 100));
+            
             if (!texto.trim()) {
-                showError('Por favor, insira o conteúdo para gerar legendas.', 'caption');
+                console.log('DEBUG - Texto vazio, mostrando erro');
+                showError('Por favor, insira o texto da notícia ou link.', 'caption');
                 return;
             }
             
-            console.log('DEBUG - Iniciando geração de legendas para:', texto.substring(0, 100));
-            
+            console.log('DEBUG - Mostrando loading');
             showLoading('caption');
-            document.getElementById('captions-suggestions').style.display = 'none';
+            document.getElementById('caption-suggestions').style.display = 'none';
 
+            console.log('DEBUG - Enviando para API');
             const apiResult = await sendToAPI('generate_captions_ai', {
-                content: texto,
-                customPrompt: customPrompt
+                content: texto
             });
 
             console.log('DEBUG - Resultado da API:', apiResult);
+            hideLoading('caption');
+            
+            if (apiResult && apiResult.success && apiResult.captions) {
+                console.log('DEBUG - Sucesso! Exibindo legenda');
+                // Pegar apenas a primeira legenda para exibir
+                const firstCaption = apiResult.captions[0];
+                document.getElementById('suggested-caption').innerHTML = `<p><strong>${firstCaption}</strong></p>`;
+                document.getElementById('caption-suggestions').style.display = 'block';
+                showSuccess('Legenda gerada com sucesso!', 'caption');
+            } else {
+                console.log('DEBUG - Erro na API ou resposta inválida');
+                showError('Erro ao gerar legenda.', 'caption');
+            }
+        }
+
+        // Função para aceitar legenda sugerida
+        function acceptCaption() {
+            const suggestedCaption = document.getElementById('suggested-caption').textContent.replace('Legenda sugerida aparecerá aqui', '').trim();
+            document.getElementById('manual-caption-input').value = suggestedCaption;
+            document.getElementById('manual-caption').style.display = 'block';
+            document.getElementById('caption-suggestions').style.display = 'none';
+            showSuccess('Legenda aceita e pronta para salvar!', 'caption');
+        }
+
+        // Função para recusar legenda sugerida
+        function rejectCaption() {
+            document.getElementById('manual-caption').style.display = 'block';
+            document.getElementById('caption-suggestions').style.display = 'none';
+            document.getElementById('manual-caption-input').value = '';
+            showError('Legenda recusada. Digite uma legenda manualmente.', 'caption');
+        }
+
+        // Função para salvar legenda manual
+        async function saveManualCaption() {
+            const manualCaption = document.getElementById('manual-caption-input').value;
+            if (!manualCaption.trim()) {
+                showError('Por favor, digite uma legenda.', 'caption');
+                return;
+            }
+            
+            showLoading('caption');
+            const apiResult = await sendToAPI('save_manual_caption', {
+                manualCaption: manualCaption
+            });
 
             hideLoading('caption');
-            if (apiResult && apiResult.success && apiResult.captions) {
-                console.log('DEBUG - Legendas recebidas:', apiResult.captions.length);
-                const captionsList = document.getElementById('captions-list');
-                captionsList.innerHTML = '';
-                apiResult.captions.forEach((caption, index) => {
-                    console.log(`DEBUG - Processando legenda ${index + 1}:`, caption.substring(0, 50));
-                    const div = document.createElement('div');
-                    div.className = 'suggestion-item';
-                    div.textContent = caption;
-                    div.onclick = () => navigator.clipboard.writeText(caption).then(() => alert('Legenda copiada!'));
-                    captionsList.appendChild(div);
-                });
-                document.getElementById('captions-suggestions').style.display = 'block';
-                showSuccess('Legendas geradas com sucesso!', 'caption');
+            if (apiResult && apiResult.success) {
+                showSuccess('Legenda salva com sucesso!', 'caption');
+                generatedContent.caption = manualCaption;
             } else {
-                console.log('DEBUG - Erro na geração de legendas:', apiResult);
-                showError('Erro ao gerar legendas.', 'caption');
+                showError('Erro ao salvar legenda.', 'caption');
             }
         }
 
@@ -1637,6 +1679,8 @@ def process_request():
         return process_generate_captions(payload)
     elif action == 'rewrite_news_ai':
         return process_rewrite_news(payload)
+    elif action == 'save_manual_caption':
+        return process_save_caption(payload)
     elif action == 'save_manual_rewrite':
         return process_save_rewrite(payload)
     elif action == 'save_manual_title':
@@ -2028,6 +2072,23 @@ def process_rewrite_news(payload):
         response_data['success'] = True
         response_data['rewrittenNews'] = selected_news
         response_data['message'] = "Notícia reescrita com sucesso (modo fallback)!"
+    
+    return jsonify(response_data)
+
+def process_save_caption(payload):
+    """Processa salvamento de legenda manual"""
+    response_data = {"success": False}
+    
+    manual_caption = payload.get('manualCaption', '')
+    if not manual_caption.strip():
+        response_data['message'] = "Legenda é obrigatória"
+        return jsonify(response_data), 400
+    
+    # Aqui você pode salvar a legenda em um banco de dados
+    print(f"Legenda salva: {manual_caption[:100]}...")
+    
+    response_data['success'] = True
+    response_data['message'] = "Legenda salva com sucesso!"
     
     return jsonify(response_data)
 
