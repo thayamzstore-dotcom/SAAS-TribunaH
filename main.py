@@ -2,34 +2,34 @@ from flask import Flask, request, jsonify, render_template_string, send_from_dir
 from flask_cors import CORS
 import requests
 import json
-import base64
-import io
-from datetime import datetime
 import os
 import re
+import time
+from datetime import datetime
+from typing import Dict, Any, Optional, Tuple
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 CORS(app)
 
-# Configuração da API do Placid
-PLACID_API_TOKEN = 'placid-3wvhjeuwarxmpfwq-cvjl621m7zlcjafp'
-PLACID_API_URL = 'https://api.placid.app/api/rest/images'
+# Configuration
+class Config:
+    PLACID_API_TOKEN = 'placid-3wvhjeuwarxmpfwq-cvjl621m7zlcjafp'
+    PLACID_API_URL = 'https://api.placid.app/api/rest/images'
+    GROQ_API_KEY = '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'
+    GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
+    UPLOAD_FOLDER = os.path.abspath('uploads')
+    MAX_FILE_SIZE = 16 * 1024 * 1024  # 16MB
+    ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'mp4', 'mov'}
 
-# Configuração da API Groq
-GROQ_API_KEY = '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'
-GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
-
-# Verificar se a chave da API está configurada
-if not GROQ_API_KEY or GROQ_API_KEY == 'your-api-key-here':
-    print("⚠️ AVISO: Chave da API Groq não configurada. Usando modo fallback.")
-    GROQ_API_AVAILABLE = False
-else:
-    GROQ_API_AVAILABLE = True
-
-# Templates disponíveis
+# Templates configuration
 PLACID_TEMPLATES = {
     'watermark': {
-        'uuid': 'x9jxylt4vx2x0',  # UUID específico para watermark
+        'uuid': 'x9jxylt4vx2x0',
         'name': 'Marca d\'Água',
         'description': 'Template para aplicar marca d\'água',
         'type': 'watermark',
@@ -93,12 +93,7 @@ PLACID_TEMPLATES = {
     }
 }
 
-# Diretório para salvar imagens temporariamente
-UPLOAD_FOLDER = os.path.abspath('uploads')
-if not os.path.exists(UPLOAD_FOLDER ):
-    os.makedirs(UPLOAD_FOLDER)
-
-# Prompts das IAs
+# AI Prompts
 AI_PROMPTS = {
     'legendas': """Gerador de Legendas Jornalísticas para Instagram
 
@@ -221,168 +216,770 @@ Sempre que receber uma notícia ou descrição, reescreva-a no formato da Tribun
 Retorne apenas a versão final da notícia modelada (título + texto)."""
 }
 
-# Função auxiliar para chamar a API Groq
-def call_groq_api(prompt, content, max_tokens=1000):
-    """
-    Chama a API Groq com o prompt e conteúdo fornecidos usando requests
-    """
-    # Verificar se a API está disponível
-    if not GROQ_API_AVAILABLE:
-        print("API Groq não disponível, usando fallback")
+# Utility functions
+def ensure_upload_directory() -> None:
+    """Ensure upload directory exists"""
+    if not os.path.exists(Config.UPLOAD_FOLDER):
+        os.makedirs(Config.UPLOAD_FOLDER)
+        logger.info(f"Created upload directory: {Config.UPLOAD_FOLDER}")
+
+def is_allowed_file(filename: str) -> bool:
+    """Check if file extension is allowed - ACCEPTS ALL FILES"""
+    logger.info(f"File accepted: {filename}")
+    return True
+
+def generate_filename(prefix: str, extension: str) -> str:
+    """Generate unique filename with timestamp"""
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    return f"{prefix}_{timestamp}.{extension}"
+
+def call_groq_api(prompt: str, content: str, max_tokens: int = 1000) -> Optional[str]:
+    """Call Groq API with error handling and retries"""
+    if not Config.GROQ_API_KEY or Config.GROQ_API_KEY == 'your-api-key-here':
+        logger.warning("Groq API key not configured")
         return None
     
-    try:
-        headers = {
-            'Authorization': f'Bearer {GROQ_API_KEY}',
-            'Content-Type': 'application/json'
-        }
-        
-        # Truncar conteúdo se muito longo (limite de ~8000 caracteres)
-        if len(content) > 4000:
-            content = content[:4000] + "..."
-        
-        full_prompt = f"{prompt}\n\nConteúdo para processar:\n{content}"
-        
-        # Truncar prompt se muito longo
-        if len(full_prompt) > 8000:
-            full_prompt = full_prompt[:8000] + "..."
-        
-        # Payload simplificado para evitar erros
-        payload = {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": full_prompt
-                }
-            ],
-            "model": "llama-3.1-8b-instant",  # Modelo menor e mais rápido
-            "max_tokens": min(max_tokens, 500),  # Limitar max_tokens
-            "temperature": 0.7
-        }
-        
-        print(f"DEBUG - Enviando para Groq (tamanho: {len(full_prompt)} chars)")
-        response = requests.post(GROQ_API_URL, json=payload, headers=headers)
-        
-        print(f"DEBUG - Status code: {response.status_code}")
-        
-        if response.status_code != 200:
-            print(f"ERRO - Status não é 200: {response.status_code}")
-            print(f"ERRO - Response: {response.text}")
-            return None
-            
-        result = response.json()
-        return result['choices'][0]['message']['content'].strip()
-        
-    except Exception as e:
-        print(f"Erro ao chamar API Groq: {e}")
-        return None
-
-# Funções para interagir com a API do Placid
-def create_placid_image(template_uuid, layers, modifications=None, webhook_success=None):
-    """
-    Cria uma nova imagem no Placid
-    """
+    # Truncate content to prevent API limits
+    if len(content) > 4000:
+        content = content[:4000] + "..."
+    
+    full_prompt = f"{prompt}\n\nConteúdo para processar:\n{content}"
+    
+    if len(full_prompt) > 8000:
+        full_prompt = full_prompt[:8000] + "..."
+    
     headers = {
-        'Authorization': f'Bearer {PLACID_API_TOKEN}',
+        'Authorization': f'Bearer {Config.GROQ_API_KEY}',
         'Content-Type': 'application/json'
     }
     
     payload = {
+        "messages": [{"role": "user", "content": full_prompt}],
+        "model": "llama-3.1-8b-instant",
+        "max_tokens": min(max_tokens, 500),
+        "temperature": 0.7
+    }
+    
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Calling Groq API (attempt {attempt + 1})")
+            response = requests.post(
+                Config.GROQ_API_URL, 
+                json=payload, 
+                headers=headers,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                return result['choices'][0]['message']['content'].strip()
+            else:
+                logger.error(f"Groq API error: {response.status_code} - {response.text}")
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Groq API request failed (attempt {attempt + 1}): {e}")
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)  # Exponential backoff
+    
+    return None
+
+def create_placid_image(template_uuid: str, layers: Dict[str, Any], 
+                       modifications: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    """Create image in Placid with error handling"""
+    logger.info("=" * 40)
+    logger.info("🎨 STARTING create_placid_image")
+    logger.info(f"🎯 Template UUID: {template_uuid}")
+    logger.info(f"🔧 Layers: {layers}")
+    logger.info(f"⚙️ Modifications: {modifications}")
+    
+    headers = {
+        'Authorization': f'Bearer {Config.PLACID_API_TOKEN}',
+        'Content-Type': 'application/json'
+    }
+    logger.info(f"🔑 Headers: {headers}")
+    
+    payload = {
         'template_uuid': template_uuid,
         'layers': layers,
-        'create_now': True  # Criar imediatamente
+        'create_now': True
     }
     
     if modifications:
         payload['modifications'] = modifications
+        logger.info("✅ Modifications added to payload")
     
-    if webhook_success:
-        payload['webhook_success'] = webhook_success
+    logger.info(f"📦 Full payload: {payload}")
+    logger.info(f"🌐 API URL: {Config.PLACID_API_URL}")
     
     try:
-        print(f"DEBUG - Enviando para Placid: {PLACID_API_URL}")
-        print(f"DEBUG - Template UUID: {payload.get('template_uuid', 'N/A')}")
-        print(f"DEBUG - Layers: {payload.get('layers', {})}")
+        logger.info("🚀 Sending request to Placid API...")
+        response = requests.post(
+            Config.PLACID_API_URL, 
+            json=payload, 
+            headers=headers,
+            timeout=30
+        )
         
-        response = requests.post(PLACID_API_URL, json=payload, headers=headers)
-        print(f"DEBUG - Status code: {response.status_code}")
+        logger.info(f"📡 Response received - Status: {response.status_code}")
+        logger.info(f"📡 Response headers: {dict(response.headers)}")
+        logger.info(f"📡 Response text: {response.text}")
         
-        if response.status_code != 200:
-            print(f"ERRO - Status não é 200: {response.status_code}")
-            print(f"ERRO - Response: {response.text}")
+        if response.status_code == 200:
+            result = response.json()
+            logger.info(f"✅ Placid image created successfully!")
+            logger.info(f"🆔 Image ID: {result.get('id', 'No ID')}")
+            logger.info(f"🔗 Image URL: {result.get('image_url', 'No URL')}")
+            logger.info(f"📊 Full result: {result}")
+            return result
+        else:
+            logger.error(f"❌ Placid API error!")
+            logger.error(f"❌ Status code: {response.status_code}")
+            logger.error(f"❌ Response text: {response.text}")
+            logger.error(f"❌ Response headers: {dict(response.headers)}")
             return None
             
-        response.raise_for_status()
-        result = response.json()
-        print(f"DEBUG - Resposta JSON: {result}")
-        return result
+    except requests.exceptions.Timeout as e:
+        logger.error(f"⏰ Placid API timeout: {e}")
+        return None
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"🔌 Placid API connection error: {e}")
+        return None
     except requests.exceptions.RequestException as e:
-        print(f"ERRO ao criar imagem no Placid: {e}")
-        if 'response' in locals():
-            print(f"ERRO - Status: {response.status_code}")
-            print(f"ERRO - Response: {response.text}")
+        logger.error(f"❌ Placid API request failed: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
         return None
     except Exception as e:
-        print(f"ERRO inesperado: {e}")
+        logger.error(f"❌ Unexpected error in create_placid_image: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
         return None
 
-def get_placid_image(image_id):
-    """
-    Obtém informações de uma imagem do Placid
-    """
+def get_placid_image_status(image_id: str) -> Optional[Dict[str, Any]]:
+    """Get Placid image status"""
+    logger.info("=" * 30)
+    logger.info("🔍 STARTING get_placid_image_status")
+    logger.info(f"🆔 Image ID: {image_id}")
+    
     headers = {
-        'Authorization': f'Bearer {PLACID_API_TOKEN}'
+        'Authorization': f'Bearer {Config.PLACID_API_TOKEN}'
     }
+    logger.info(f"🔑 Headers: {headers}")
+    
+    url = f'{Config.PLACID_API_URL}/{image_id}'
+    logger.info(f"🌐 Status URL: {url}")
     
     try:
-        response = requests.get(f'{PLACID_API_URL}/{image_id}', headers=headers)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        print(f"Erro ao obter imagem do Placid: {e}")
-        return None
-
-def delete_placid_image(image_id):
-    """
-    Deleta uma imagem do Placid
-    """
-    headers = {
-        'Authorization': f'Bearer {PLACID_API_TOKEN}'
-    }
-    
-    try:
-        response = requests.delete(f'{PLACID_API_URL}/{image_id}', headers=headers)
-        response.raise_for_status()
-        return True
-    except requests.exceptions.RequestException as e:
-        print(f"Erro ao deletar imagem do Placid: {e}")
-        return False
-
-def poll_placid_image_status(image_id, max_attempts=30, delay=2):
-    """
-    Polling para verificar o status de uma imagem no Placid
-    """
-    import time
-    
-    for attempt in range(max_attempts):
-        image_data = get_placid_image(image_id)
-        if not image_data:
+        logger.info("🚀 Sending status request to Placid...")
+        response = requests.get(
+            url, 
+            headers=headers,
+            timeout=30
+        )
+        
+        logger.info(f"📡 Status response - Code: {response.status_code}")
+        logger.info(f"📡 Status response - Headers: {dict(response.headers)}")
+        logger.info(f"📡 Status response - Text: {response.text}")
+        
+        if response.status_code == 200:
+            result = response.json()
+            logger.info(f"✅ Status retrieved successfully: {result}")
+            return result
+        else:
+            logger.error(f"❌ Failed to get image status: {response.status_code}")
+            logger.error(f"❌ Response text: {response.text}")
             return None
             
-        status = image_data.get('status')
-        
-        if status == 'finished':
-            return image_data
-        elif status == 'error':
-            print(f"Erro na criação da imagem: {image_data}")
-            return None
-        
-        time.sleep(delay)
-    
-    print(f"Timeout: Imagem não foi criada em {max_attempts * delay} segundos")
-    return None
+    except requests.exceptions.Timeout as e:
+        logger.error(f"⏰ Timeout getting image status: {e}")
+        return None
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"🔌 Connection error getting image status: {e}")
+        return None
+    except requests.exceptions.RequestException as e:
+        logger.error(f"❌ Request error getting image status: {type(e).__name__}: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"❌ Unexpected error getting image status: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
+        return None
 
-# Template HTML completo
+def save_uploaded_file(file, prefix: str) -> Tuple[bool, str, str]:
+    """Save uploaded file and return success, filepath, and public URL"""
+    logger.info("=" * 30)
+    logger.info("💾 STARTING save_uploaded_file")
+    logger.info(f"📁 File object: {file}")
+    logger.info(f"🏷️ Prefix: {prefix}")
+    
+    try:
+        if not file or not file.filename:
+            logger.error("❌ No file or filename provided")
+            return False, "", "No file provided"
+        
+        logger.info(f"✅ File validation passed: {file.filename}")
+        logger.info(f"📄 File content type: {file.content_type if hasattr(file, 'content_type') else 'Unknown'}")
+        
+        # Accept all file types
+        logger.info(f"✅ Accepting file: {file.filename}")
+        
+        # Check file size
+        logger.info("📏 Checking file size...")
+        file.seek(0, 2)  # Seek to end
+        size = file.tell()
+        file.seek(0)  # Reset to beginning
+        logger.info(f"📏 File size: {size} bytes")
+        logger.info(f"📏 Max allowed size: {Config.MAX_FILE_SIZE} bytes")
+        
+        if size > Config.MAX_FILE_SIZE:
+            logger.error(f"❌ File too large: {size} > {Config.MAX_FILE_SIZE}")
+            return False, "", "File too large"
+        
+        logger.info("✅ File size check passed")
+        
+        # Generate filename
+        logger.info("🏷️ Generating filename...")
+        if '.' not in file.filename:
+            logger.error("❌ No extension in filename")
+            return False, "", "No file extension"
+        
+        ext = file.filename.rsplit('.', 1)[1].lower()
+        logger.info(f"🏷️ File extension: {ext}")
+        
+        filename = generate_filename(prefix, ext)
+        logger.info(f"🏷️ Generated filename: {filename}")
+        
+        filepath = os.path.join(Config.UPLOAD_FOLDER, filename)
+        logger.info(f"📂 Full filepath: {filepath}")
+        
+        # Ensure directory exists
+        logger.info("📁 Ensuring upload directory exists...")
+        ensure_upload_directory()
+        
+        # Save file
+        logger.info("💾 Saving file to disk...")
+        file.save(filepath)
+        logger.info("✅ File saved successfully")
+        
+        # Generate public URL
+        public_url = f"{request.url_root}uploads/{filename}"
+        logger.info(f"🌐 Public URL: {public_url}")
+        
+        # Verify file exists
+        if os.path.exists(filepath):
+            actual_size = os.path.getsize(filepath)
+            logger.info(f"✅ File verification: {filename} ({actual_size} bytes)")
+        else:
+            logger.error(f"❌ File verification failed: {filepath} not found")
+            return False, "", "File save verification failed"
+        
+        logger.info(f"🎉 File upload completed: {filename} ({size} bytes)")
+        return True, filepath, public_url
+        
+    except Exception as e:
+        logger.error(f"❌ Exception in save_uploaded_file: {type(e).__name__}: {e}")
+        logger.error(f"❌ Exception details: {str(e)}")
+        import traceback
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
+        return False, "", str(e)
+
+def configure_layers_for_template(template_key: str, template_info: Dict[str, Any], 
+                                public_file_url: str, title: str = "", 
+                                subject: str = "", credits: str = "") -> Dict[str, Any]:
+    """Configure layers based on template type"""
+    logger.info("=" * 35)
+    logger.info("🔧 STARTING configure_layers_for_template")
+    logger.info(f"🎯 Template key: {template_key}")
+    logger.info(f"📋 Template info: {template_info}")
+    logger.info(f"🌐 Public file URL: {public_file_url}")
+    logger.info(f"📝 Title: {title}")
+    logger.info(f"📝 Subject: {subject}")
+    logger.info(f"📝 Credits: {credits}")
+    
+    template_type = template_info.get('type', 'feed')
+    logger.info(f"🎨 Template type: {template_type}")
+    
+    layers = {
+        "imgprincipal": {
+            "image": public_file_url
+        }
+    }
+    logger.info(f"🖼️ Base layers: {layers}")
+    
+    # Add text layers based on template type
+    if template_type in ['feed', 'watermark'] and title:
+        layers["titulocopy"] = {"text": title}
+        logger.info(f"✅ Added title layer for {template_type}: {title}")
+    else:
+        logger.info(f"⏭️ Skipping title layer - Type: {template_type}, Title: {title}")
+        
+    if template_type == 'feed':
+        logger.info("🔍 Processing feed template layers...")
+        if subject:
+            layers["assuntext"] = {"text": subject}
+            logger.info(f"✅ Added subject layer: {subject}")
+        else:
+            logger.info("⏭️ No subject provided")
+            
+        if credits:
+            layers["creditfoto"] = {"text": f"FOTO: {credits}"}
+            logger.info(f"✅ Added credits layer: FOTO: {credits}")
+        else:
+            logger.info("⏭️ No credits provided")
+            
+        layers["credit"] = {"text": "Tribuna Hoje"}
+        logger.info("✅ Added credit layer: Tribuna Hoje")
+        
+    elif template_type == 'story' and title:
+        layers["titulocopy"] = {"text": title}
+        logger.info(f"✅ Added title layer for story: {title}")
+    else:
+        logger.info(f"⏭️ Skipping story title - Type: {template_type}, Title: {title}")
+        
+    if template_type == 'reels' and title:
+        layers["titulocopy"] = {"text": title}
+        logger.info(f"✅ Added title layer for reels: {title}")
+    else:
+        logger.info(f"⏭️ Skipping reels title - Type: {template_type}, Title: {title}")
+    
+    logger.info(f"🎉 Final layers configured: {layers}")
+    return layers
+
+# API Response helpers
+def success_response(message: str, **kwargs) -> Dict[str, Any]:
+    """Create success response"""
+    response = {"success": True, "message": message}
+    response.update(kwargs)
+    return response
+
+def error_response(message: str, **kwargs) -> Dict[str, Any]:
+    """Create error response"""
+    response = {"success": False, "message": message}
+    response.update(kwargs)
+    return response
+
+# Route handlers
+@app.route('/')
+def index():
+    return render_template_string(HTML_TEMPLATE)
+
+@app.route('/test-placid')
+def test_placid():
+    """Test Placid API connection"""
+    test_payload = {
+        'template_uuid': 'qe0qo74vbrgxe',
+        'layers': {
+            'imgprincipal': {
+                'image': 'https://via.placeholder.com/1200x1200/FF0000/FFFFFF?text=TESTE'
+            }
+        },
+        'create_now': True
+    }
+    
+    result = create_placid_image(
+        test_payload['template_uuid'], 
+        test_payload['layers']
+    )
+    
+    if result:
+        return f"✅ Placid funcionando! ID: {result.get('id', 'N/A')}"
+    else:
+        return "❌ Erro no Placid!"
+
+@app.route('/api/process', methods=['POST'])
+def process_request():
+    """Main API endpoint for processing requests"""
+    logger.info("=" * 60)
+    logger.info("🌐 STARTING process_request")
+    logger.info(f"📡 Request method: {request.method}")
+    logger.info(f"📡 Request URL: {request.url}")
+    logger.info(f"📡 Request headers: {dict(request.headers)}")
+    logger.info(f"📡 Request content type: {request.content_type}")
+    logger.info(f"📡 Request content length: {request.content_length}")
+    
+    ensure_upload_directory()
+    logger.info("✅ Upload directory ensured")
+    
+    try:
+        # Parse request data
+        logger.info("🔍 Parsing request data...")
+        logger.info(f"📋 Request form: {request.form}")
+        logger.info(f"📋 Request files: {request.files}")
+        
+        # Check if request has JSON data (only if content-type is application/json)
+        if request.content_type == 'application/json':
+            logger.info(f"📋 Request JSON: {request.json}")
+        else:
+            logger.info("📋 Request is not JSON, skipping JSON parsing")
+        
+        if request.form:
+            logger.info("📝 Processing form data")
+            action = request.form.get('action')
+            data_str = request.form.get('data')
+            logger.info(f"🎯 Action from form: {action}")
+            logger.info(f"📦 Data string from form: {data_str}")
+            payload = json.loads(data_str) if data_str else {}
+            logger.info(f"📦 Parsed payload: {payload}")
+        elif request.content_type == 'application/json':
+            logger.info("📝 Processing JSON data")
+            data = request.json or {}
+            action = data.get('action')
+            payload = data.get('data', {})
+            logger.info(f"🎯 Action from JSON: {action}")
+            logger.info(f"📦 Payload from JSON: {payload}")
+        else:
+            logger.error(f"❌ Unsupported content type: {request.content_type}")
+            return jsonify(error_response("Unsupported content type")), 400
+        
+        logger.info(f"🎯 Final action: {action}")
+        logger.info(f"📦 Final payload: {payload}")
+        
+        # Route to appropriate handler
+        handlers = {
+            'apply_watermark': handle_watermark,
+            'generate_post': handle_generate_post,
+            'generate_title_ai': handle_generate_title,
+            'generate_captions_ai': handle_generate_captions,
+            'rewrite_news_ai': handle_rewrite_news,
+            'save_manual_caption': handle_save_caption,
+            'save_manual_rewrite': handle_save_rewrite,
+            'save_manual_title': handle_save_title,
+        }
+        
+        logger.info(f"🔧 Available handlers: {list(handlers.keys())}")
+        handler = handlers.get(action)
+        logger.info(f"🎯 Selected handler: {handler}")
+        
+        if not handler:
+            logger.error(f"❌ Unknown action: {action}")
+            return jsonify(error_response(f"Unknown action: {action}")), 400
+        
+        logger.info(f"🚀 Calling handler for action: {action}")
+        result = handler(payload, request)
+        logger.info(f"✅ Handler completed, returning result")
+        return result
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ JSON decode error: {e}")
+        return jsonify(error_response("Invalid JSON data")), 400
+    except Exception as e:
+        logger.error(f"❌ Exception in process_request: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
+        return jsonify(error_response("Internal server error")), 500
+
+def handle_watermark(payload: Dict[str, Any], request) -> jsonify:
+    """Handle watermark application"""
+    file = request.files.get('file') if hasattr(request, 'files') else None
+    if not file:
+        return jsonify(error_response("No file provided"))
+    
+    success, filepath, public_url = save_uploaded_file(file, "watermark")
+    if not success:
+        return jsonify(error_response(public_url))  # Error message in public_url
+    
+    template_key = 'watermark'
+    template_info = PLACID_TEMPLATES[template_key]
+    
+    layers = configure_layers_for_template(
+        template_key, template_info, public_url,
+        title=payload.get('title', ''),
+        subject=payload.get('subject', ''),
+        credits=payload.get('credits', '')
+    )
+    
+    modifications = {
+        "filename": f"watermark_{int(time.time())}.png",
+        "width": template_info['dimensions']['width'],
+        "height": template_info['dimensions']['height'],
+        "image_format": "png"
+    }
+    
+    result = create_placid_image(template_info['uuid'], layers, modifications)
+    
+    if result:
+        if result.get('image_url'):
+            return jsonify(success_response(
+                "Watermark applied successfully!",
+                imageUrl=result['image_url']
+            ))
+        else:
+            return jsonify(success_response(
+                "Watermark processing...",
+                imageId=result.get('id')
+            ))
+    else:
+        return jsonify(error_response("Failed to create watermark"))
+
+def handle_generate_post(payload: Dict[str, Any], request) -> jsonify:
+    """Handle post generation"""
+    logger.info("=" * 50)
+    logger.info("🚀 STARTING handle_generate_post")
+    logger.info(f"📦 Payload received: {payload}")
+    logger.info(f"🔍 Request files: {request.files}")
+    logger.info(f"🔍 Request form: {request.form}")
+    
+    file = request.files.get('file') if hasattr(request, 'files') else None
+    logger.info(f"📁 File object: {file}")
+    logger.info(f"📁 File filename: {file.filename if file else 'None'}")
+    logger.info(f"📁 File content type: {file.content_type if file else 'None'}")
+    
+    if not file:
+        logger.error("❌ No file provided")
+        return jsonify(error_response("No file provided"))
+    
+    logger.info("✅ File validation passed")
+    
+    # Validate required fields
+    template_key = payload.get('template', 'feed_1_red')
+    title = payload.get('title', '')
+    subject = payload.get('subject', '')
+    credits = payload.get('credits', '')
+    
+    logger.info(f"🎯 Template key: {template_key}")
+    logger.info(f"📝 Title: {title}")
+    logger.info(f"📝 Subject: {subject}")
+    logger.info(f"📝 Credits: {credits}")
+    
+    if template_key not in PLACID_TEMPLATES:
+        logger.warning(f"⚠️ Template {template_key} not found, using fallback")
+        template_key = 'feed_1_red'  # Fallback
+    
+    template_info = PLACID_TEMPLATES[template_key]
+    logger.info(f"🎨 Template info: {template_info}")
+    
+    # Check if feed template requires additional fields
+    if template_info['type'] == 'feed':
+        logger.info("🔍 Checking feed template requirements")
+        if not subject or not credits:
+            logger.error(f"❌ Feed template missing fields - Subject: {subject}, Credits: {credits}")
+            return jsonify(error_response("Feed templates require subject and credits"))
+        logger.info("✅ Feed template requirements met")
+    
+    logger.info("💾 Starting file upload process")
+    success, filepath, public_url = save_uploaded_file(file, "post")
+    logger.info(f"💾 Upload result - Success: {success}, Filepath: {filepath}, URL: {public_url}")
+    
+    if not success:
+        logger.error(f"❌ File upload failed: {public_url}")
+        return jsonify(error_response(public_url))
+    
+    logger.info("🔧 Configuring layers for template")
+    layers = configure_layers_for_template(
+        template_key, template_info, public_url,
+        title=title,
+        subject=subject,
+        credits=credits
+    )
+    logger.info(f"🔧 Layers configured: {layers}")
+    
+    modifications = {
+        "filename": f"instagram_post_{int(time.time())}.png",
+        "width": template_info['dimensions']['width'],
+        "height": template_info['dimensions']['height'],
+        "image_format": "png"
+    }
+    logger.info(f"⚙️ Modifications: {modifications}")
+    
+    logger.info("🎨 Creating Placid image")
+    result = create_placid_image(template_info['uuid'], layers, modifications)
+    logger.info(f"🎨 Placid result: {result}")
+    
+    if result:
+        if result.get('image_url'):
+            logger.info("✅ Image created with direct URL")
+            return jsonify(success_response(
+                "Post generated successfully!",
+                imageUrl=result['image_url']
+            ))
+        else:
+            logger.info("⏳ Image processing in background")
+            return jsonify(success_response(
+                "Post processing...",
+                imageId=result.get('id')
+            ))
+    else:
+        logger.error("❌ Failed to create post in Placid")
+        return jsonify(error_response("Failed to create post"))
+
+def handle_generate_title(payload: Dict[str, Any], request) -> jsonify:
+    """Handle title generation with AI"""
+    content = payload.get('newsContent', '').strip()
+    if not content:
+        return jsonify(error_response("News content is required"))
+    
+    suggested_title = call_groq_api(AI_PROMPTS['titulo'], content, max_tokens=200)
+    
+    if suggested_title:
+        return jsonify(success_response(
+            "Title generated successfully!",
+            suggestedTitle=suggested_title
+        ))
+    else:
+        # Fallback examples
+        fallback_titles = [
+            "EXCLUSIVO: Casos De Dengue DISPARAM Em Maceió E Hospital Soa Alerta...",
+            "URGENTE: MPF Impõe Regras Mais Rígidas Para Construções Na Orla...",
+            "CONFIRMADO: Motoristas De Aplicativo Precisam Regularizar MEI...",
+        ]
+        import random
+        return jsonify(success_response(
+            "Title generated (fallback mode)!",
+            suggestedTitle=random.choice(fallback_titles)
+        ))
+
+def handle_generate_captions(payload: Dict[str, Any], request) -> jsonify:
+    """Handle caption generation with AI"""
+    content = payload.get('content', '').strip()
+    if not content:
+        return jsonify(error_response("Content is required"))
+    
+    generated_caption = call_groq_api(AI_PROMPTS['legendas'], content, max_tokens=500)
+    
+    if generated_caption:
+        captions = [generated_caption]
+        
+        # Generate variations
+        for _ in range(2):
+            variation = call_groq_api(AI_PROMPTS['legendas'], content, max_tokens=500)
+            if variation and variation not in captions:
+                captions.append(variation)
+        
+        return jsonify(success_response(
+            "Captions generated successfully!",
+            captions=captions
+        ))
+    else:
+        # Fallback examples
+        fallback_captions = [
+            "🚨 URGENTE: Casos de dengue disparam em Maceió e preocupam autoridades!\n\nO Hospital Universitário registrou aumento de 150% nos atendimentos na última semana.\n\n#TribunaHoje #Alagoas #Maceió #Dengue\n\n📱 Acesse o link na bio!",
+            "📊 EXCLUSIVO: MPF impõe regras mais rígidas para construções na orla!\n\nA medida visa proteger o meio ambiente na região.\n\n#TribunaHoje #Alagoas #MeioAmbiente\n\n💬 Comente sua opinião!",
+        ]
+        
+        return jsonify(success_response(
+            "Captions generated (fallback mode)!",
+            captions=fallback_captions
+        ))
+
+def handle_rewrite_news(payload: Dict[str, Any], request) -> jsonify:
+    """Handle news rewriting with AI"""
+    content = payload.get('newsContent', '').strip()
+    if not content:
+        return jsonify(error_response("News content is required"))
+    
+    rewritten_content = call_groq_api(AI_PROMPTS['reescrita'], content, max_tokens=1500)
+    
+    if rewritten_content:
+        lines = rewritten_content.strip().split('\n')
+        title = lines[0].strip() if lines else "Notícia Reescrita"
+        text = '\n'.join(lines[1:]).strip() if len(lines) > 1 else rewritten_content
+        
+        if not text:
+            text = rewritten_content
+        
+        return jsonify(success_response(
+            "News rewritten successfully!",
+            rewrittenNews={"titulo": title, "texto": text}
+        ))
+    else:
+        # Fallback example
+        fallback_news = {
+            "titulo": "Alfredo Gaspar assume relatoria da CPMI que investiga fraudes no INSS",
+            "texto": "O deputado federal Alfredo Gaspar (União Brasil-AL) foi designado relator da Comissão Parlamentar Mista de Inquérito (CPMI) que apura possíveis fraudes no Instituto Nacional do Seguro Social (INSS). O anúncio foi feito pelo presidente da comissão. Gaspar afirmou que atuará com base na Constituição para dar respostas claras à sociedade."
+        }
+        
+        return jsonify(success_response(
+            "News rewritten (fallback mode)!",
+            rewrittenNews=fallback_news
+        ))
+
+def handle_save_caption(payload: Dict[str, Any], request) -> jsonify:
+    """Handle manual caption saving"""
+    caption = payload.get('manualCaption', '').strip()
+    if not caption:
+        return jsonify(error_response("Caption is required"))
+    
+    logger.info(f"Caption saved: {caption[:50]}...")
+    return jsonify(success_response("Caption saved successfully!"))
+
+def handle_save_rewrite(payload: Dict[str, Any], request) -> jsonify:
+    """Handle manual rewrite saving"""
+    title = payload.get('manualTitle', '').strip()
+    text = payload.get('manualText', '').strip()
+    
+    if not title or not text:
+        return jsonify(error_response("Both title and text are required"))
+    
+    logger.info(f"Rewrite saved - Title: {title}")
+    return jsonify(success_response("Rewritten news saved successfully!"))
+
+def handle_save_title(payload: Dict[str, Any], request) -> jsonify:
+    """Handle manual title saving"""
+    title = payload.get('manualTitle', '').strip()
+    if not title:
+        return jsonify(error_response("Title is required"))
+    
+    logger.info(f"Title saved: {title}")
+    return jsonify(success_response("Title saved successfully!"))
+
+@app.route('/uploads/<filename>')
+def uploaded_file(filename):
+    """Serve uploaded files"""
+    try:
+        return send_from_directory(Config.UPLOAD_FOLDER, filename)
+    except Exception as e:
+        logger.error(f"Error serving file {filename}: {e}")
+        return "File not found", 404
+
+@app.route('/post/<slug>')
+def post_image(slug):
+    """Serve most recent image for a post slug"""
+    try:
+        files = os.listdir(Config.UPLOAD_FOLDER)
+        image_files = [f for f in files if f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif'))]
+        
+        if not image_files:
+            return "No images found", 404
+        
+        latest_file = max(image_files, key=lambda x: os.path.getctime(os.path.join(Config.UPLOAD_FOLDER, x)))
+        logger.info(f"Serving image for slug '{slug}': {latest_file}")
+        
+        return send_from_directory(Config.UPLOAD_FOLDER, latest_file)
+    except Exception as e:
+        logger.error(f"Error serving image for slug '{slug}': {e}")
+        return "Error loading image", 500
+
+@app.route('/api/check-image/<image_id>')
+def check_image_status(image_id):
+    """Check Placid image processing status"""
+    try:
+        image_data = get_placid_image_status(image_id)
+        if not image_data:
+            return jsonify(error_response("Image not found")), 404
+        
+        status = image_data.get('status')
+        if status == 'finished' and image_data.get('image_url'):
+            return jsonify(success_response(
+                "Image processing completed",
+                status="finished",
+                imageUrl=image_data['image_url']
+            ))
+        elif status == 'error':
+            return jsonify(error_response(
+                "Error processing image",
+                status="error"
+            ))
+        else:
+            return jsonify(success_response(
+                "Image still processing",
+                status="processing"
+            ))
+    except Exception as e:
+        logger.error(f"Error checking image status {image_id}: {e}")
+        return jsonify(error_response("Error checking image status")), 500
+
+# HTML Template
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -554,11 +1151,6 @@ HTML_TEMPLATE = """
         .control-input:focus {
             outline: none;
             border-color: #667eea;
-        }
-
-        .range-input {
-            width: 100%;
-            margin: 10px 0;
         }
 
         .format-selector {
@@ -736,22 +1328,21 @@ HTML_TEMPLATE = """
             100% { transform: rotate(360deg); }
         }
 
-        .success-message {
-            background: #d4edda;
-            color: #155724;
+        .success-message, .error-message {
             padding: 15px;
             border-radius: 5px;
             margin-bottom: 20px;
             display: none;
         }
 
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+        }
+
         .error-message {
             background: #f8d7da;
             color: #721c24;
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-            display: none;
         }
 
         @media (max-width: 768px) {
@@ -765,6 +1356,10 @@ HTML_TEMPLATE = """
             
             .format-selector {
                 flex-direction: column;
+            }
+            
+            .template-grid {
+                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
             }
         }
     </style>
@@ -784,17 +1379,16 @@ HTML_TEMPLATE = """
                 <button class="tab-button" onclick="switchTab('reescrever-noticia')">📝 Reescrever Notícia</button>
             </div>
 
-
             <!-- Aba Gerar Posts -->
             <div id="gerar-posts" class="tab-content active">
                 <h2>Gerar Posts para Instagram</h2>
                 
                 <div class="upload-area" onclick="document.getElementById('post-file').click()">
                     <div class="upload-icon">📁</div>
-                    <div class="upload-text">Upload da foto ou vídeo</div>
-                    <div class="upload-subtext">Formatos suportados: JPG, PNG, MP4, MOV</div>
+                    <div class="upload-text">Upload de qualquer arquivo</div>
+                    <div class="upload-subtext">Todos os formatos são aceitos</div>
                 </div>
-                <input type="file" id="post-file" class="file-input" accept="image/*,video/*" onchange="handleFileUpload(this, 'post')">
+                <input type="file" id="post-file" class="file-input" onchange="handleFileUpload(this, 'post')">
 
                 <div class="controls-section">
                     <h3>Selecione o Formato</h3>
@@ -840,7 +1434,7 @@ HTML_TEMPLATE = """
                             <p>Feed - Modelo 1 (Red)</p>
                         </div>
                         <div class="template-item" onclick="selectTemplate('watermark1')">
-                            <div class="template-preview">🔴</div>
+                            <div class="template-preview">🏷️</div>
                             <p>WaterMark1</p>
                         </div>
                         <div class="template-item" onclick="selectTemplate('feed_2_white')">
@@ -859,8 +1453,7 @@ HTML_TEMPLATE = """
                         <div class="controls-section">
                             <div class="control-group">
                                 <label class="control-label">Título *</label>
-                                <input type="text" class="control-input" id="titulo" placeholder="Digite o título do post" required oninput="generateSlug(this.value)">
-                                <div id="slug-preview" style="margin-top: 10px; color: #6c757d;"></div>
+                                <input type="text" class="control-input" id="titulo" placeholder="Digite o título do post" required>
                             </div>
                             <div class="control-group" id="assunto-group" style="display: none;">
                                 <label class="control-label">Assunto *</label>
@@ -888,8 +1481,9 @@ HTML_TEMPLATE = """
                                 Pré-visualização do post aparecerá aqui
                             </div>
                         </div>
-                        <button class="btn btn-success" onclick="downloadFile(\'post\')">📥 Download Post</button>
-                        <a href="#" id="open-post-image" class="btn btn-secondary" style="margin-left: 10px; display: none;" target="_blank">🖼️ Abrir Imagem</a>                   </div>
+                        <button class="btn btn-success" onclick="downloadFile('post')" style="display: none;" id="download-post-btn">📥 Download Post</button>
+                        <a href="#" id="open-post-image" class="btn btn-secondary" style="margin-left: 10px; display: none;" target="_blank">🖼️ Abrir Imagem</a>
+                    </div>
                 </div>
             </div>
 
@@ -1024,55 +1618,14 @@ HTML_TEMPLATE = """
     </div>
 
     <script>
-        // Estado global da aplicação
+        // Global state
         let currentTab = 'gerar-posts';
         let selectedFormat = 'reels';
         let selectedTemplate = 'stories_1';
         let uploadedFiles = {};
-        let uploadedDataURLs = {};
-        let generatedContent = {};
         let generatedImageUrls = {};
 
-        // Função para gerar slug a partir do título
-        function generateSlug(title) {
-            const slug = title
-                .toLowerCase()
-                .normalize("NFD")
-                .replace(/[^\w\s-]/g, "")
-                .replace(/\s+/g, "-")
-                .replace(/--+/g, "-");
-            document.getElementById("slug-preview").textContent = `Link Sugerido: ${window.location.origin}/post/${slug}`;
-        }
-
-        // Função para verificar status da imagem no Placid
-        async function checkImageStatus(imageId, type) {
-            try {
-                const response = await fetch(`/api/check-image/${imageId}`);
-                const result = await response.json();
-                
-                if (result.success && result.status === 'finished' && result.imageUrl) {
-                    generatedImageUrls[type] = result.imageUrl;
-                    const preview = document.getElementById(`${type}-preview`);
-                    preview.innerHTML = `<img src="${result.imageUrl}" style="max-width: 100%; max-height: 300px; border-radius: 10px;">`;
-                    showSuccess(`${type === 'watermark' ? 'Marca d\\'água' : 'Post'} finalizado com sucesso!`, type);
-                    const openButton = document.getElementById(`open-${type}-image`);
-                    if (openButton) {
-                        openButton.href = result.imageUrl;
-                        openButton.style.display = 'inline-block';
-                    }
-                } else if (result.success && result.status === 'processing') {
-                    // Continuar verificando a cada 3 segundos
-                    setTimeout(() => checkImageStatus(imageId, type), 3000);
-                } else {
-                    showError(`Erro ao processar ${type === 'watermark' ? 'marca d\\'água' : 'post'}.`, type);
-                }
-            } catch (error) {
-                console.error('Erro ao verificar status:', error);
-                showError(`Erro ao verificar status do ${type === 'watermark' ? 'watermark' : 'post'}.`, type);
-            }
-        }
-
-        // Função para trocar abas
+        // Tab switching
         function switchTab(tabName) {
             document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
@@ -1083,24 +1636,29 @@ HTML_TEMPLATE = """
             currentTab = tabName;
         }
 
-        // Função para lidar com upload de arquivos
+        // File upload handling
         function handleFileUpload(input, type) {
             const file = input.files[0];
-            if (file) {
-                uploadedFiles[type] = file;
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    uploadedDataURLs[type] = e.target.result;
-                    const previewElement = document.getElementById(`${type}-preview`);
-                    if (file.type.startsWith('image/')) {
-                        previewElement.innerHTML = `<img src="${e.target.result}" style="max-width: 100%; max-height: 300px; border-radius: 10px;">`;
-                    } else if (file.type.startsWith('video/')) {
-                        previewElement.innerHTML = `<video controls style="max-width: 100%; max-height: 300px; border-radius: 10px;"><source src="${URL.createObjectURL(file)}" type="${file.type}"></video>`;
-                    }
-                    showSuccess(`Arquivo ${file.name} carregado com sucesso!`, type);
-                };
-                reader.readAsDataURL(file);
+            if (!file) return;
+            
+            // Validate file size (16MB limit)
+            if (file.size > 16 * 1024 * 1024) {
+                showError('Arquivo muito grande. Limite: 16MB', type);
+                return;
             }
+            
+            uploadedFiles[type] = file;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const previewElement = document.getElementById(`${type}-preview`);
+                if (file.type.startsWith('image/')) {
+                    previewElement.innerHTML = `<img src="${e.target.result}" style="max-width: 100%; max-height: 300px; border-radius: 10px; object-fit: contain;">`;
+                } else if (file.type.startsWith('video/')) {
+                    previewElement.innerHTML = `<video controls style="max-width: 100%; max-height: 300px; border-radius: 10px;"><source src="${URL.createObjectURL(file)}" type="${file.type}"></video>`;
+                }
+                showSuccess(`Arquivo ${file.name} carregado com sucesso!`, type);
+            };
+            reader.readAsDataURL(file);
         }
 
         // Drag and drop functionality
@@ -1129,92 +1687,7 @@ HTML_TEMPLATE = """
             });
         });
 
-        // Função para enviar para API
-        async function sendToAPI(action, data) {
-            try {
-                console.log(`DEBUG - Enviando para API: ${action}`, data);
-                
-                let formData = new FormData();
-                formData.append('action', action);
-                formData.append('data', JSON.stringify(data));
-                
-                // Adicionar arquivo se disponível
-                if (action === 'apply_watermark' && uploadedFiles.watermark) {
-                    formData.append('file', uploadedFiles.watermark);
-                } else if (action === 'generate_post' && uploadedFiles.post) {
-                    formData.append('file', uploadedFiles.post);
-                }
-                
-                const response = await fetch('/api/process', {
-                    method: 'POST',
-                    body: formData,
-                });
-                
-                console.log(`DEBUG - Response status: ${response.status}`);
-                
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error(`DEBUG - HTTP error: ${response.status} - ${errorText}`);
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                
-                const result = await response.json();
-                console.log('DEBUG - API success:', result);
-                return result;
-            } catch (error) {
-                console.error('DEBUG - API error:', error);
-                showError('Erro ao processar solicitação.', action.split('_')[0]);
-                return null;
-            }
-        }
-
-        // Função para atualizar transparência
-        function updateTransparency(value) {
-            document.getElementById('transparency-value').textContent = value + '%';
-        }
-
-        // Função para aplicar marca d'água
-        async function applyWatermark() {
-            if (!uploadedFiles.watermark) {
-                showError('Por favor, faça upload de um arquivo primeiro.', 'watermark');
-                return;
-            }
-            
-            // Watermark só precisa da imagem
-            
-            showLoading('watermark');
-            
-            const position = document.getElementById('watermark-position').value;
-            const transparency = document.getElementById('transparency').value;
-            const apiResult = await sendToAPI("apply_watermark", {
-                fileType: uploadedFiles.watermark.type,
-                fileName: uploadedFiles.watermark.name,
-                position: position,
-                transparency: transparency
-            });
-
-            hideLoading('watermark');
-            if (apiResult && apiResult.success) {
-                if (apiResult.imageUrl) {
-                    generatedImageUrls.watermark = apiResult.imageUrl;
-                    const preview = document.getElementById('watermark-preview');
-                    preview.innerHTML = `<img src="${apiResult.imageUrl}" style="max-width: 100%; max-height: 300px; border-radius: 10px;">`;
-                    showSuccess('Marca d\\'água aplicada com sucesso!', 'watermark');
-                    document.getElementById('open-watermark-image').href = apiResult.imageUrl;
-                    document.getElementById('open-watermark-image').style.display = 'inline-block';
-                } else if (apiResult.imageId) {
-                    showSuccess('Marca d\\'água em processamento. Aguarde...', 'watermark');
-                    // Verificar status periodicamente
-                    checkImageStatus(apiResult.imageId, 'watermark');
-                } else {
-                    showSuccess('Marca d\\\'água processada com sucesso!', 'watermark');
-                }
-            } else {
-                showError('Erro ao aplicar marca d\\\'água.', 'watermark');
-            }
-        }
-
-        // Função para selecionar formato
+        // Format selection
         function selectFormat(format) {
             document.querySelectorAll('.format-option').forEach(option => option.classList.remove('selected'));
             event.target.closest('.format-option').classList.add('selected');
@@ -1226,26 +1699,30 @@ HTML_TEMPLATE = """
             if (format === 'feed') {
                 assuntoGroup.style.display = 'block';
                 creditosGroup.style.display = 'block';
-            } else if (format === 'watermark') {
-                assuntoGroup.style.display = 'none';
-                creditosGroup.style.display = 'none';
-                // Para watermark, selecionar automaticamente o template de watermark
-                selectTemplate('watermark');
             } else {
                 assuntoGroup.style.display = 'none';
                 creditosGroup.style.display = 'none';
             }
+            
+            // Auto-select appropriate template based on format
+            if (format === 'watermark') {
+                selectTemplate('watermark');
+            } else if (format === 'feed') {
+                selectTemplate('feed_1_red');
+            } else if (format === 'stories') {
+                selectTemplate('stories_1');
+            } else if (format === 'reels') {
+                selectTemplate('reels_feed_2');
+            }
         }
 
-        // Função para selecionar template
+        // Template selection
         function selectTemplate(templateKey) {
             document.querySelectorAll('.template-item').forEach(item => item.classList.remove('selected'));
             
-            // Se chamada programaticamente, selecionar pelo templateKey
             if (event && event.target) {
                 event.target.closest('.template-item').classList.add('selected');
             } else {
-                // Buscar o elemento pelo templateKey
                 const templateElement = document.querySelector(`[onclick="selectTemplate('${templateKey}')"]`);
                 if (templateElement) {
                     templateElement.classList.add('selected');
@@ -1253,100 +1730,140 @@ HTML_TEMPLATE = """
             }
             
             selectedTemplate = templateKey;
-            
-            // Mostrar/ocultar campos baseado no tipo de template
             updateFieldsForTemplate(templateKey);
         }
         
-        // Função para atualizar campos baseado no template
         function updateFieldsForTemplate(templateKey) {
             const assuntoGroup = document.getElementById('assunto-group');
             const creditosGroup = document.getElementById('creditos-group');
             
-            // Templates de Feed precisam de assunto e créditos
             if (templateKey.includes('feed')) {
                 assuntoGroup.style.display = 'block';
                 creditosGroup.style.display = 'block';
-            } else if (templateKey === 'watermark') {
-                // Template de watermark só precisa da imagem
-                assuntoGroup.style.display = 'none';
-                creditosGroup.style.display = 'none';
             } else {
-                // Templates de Story e Reels não precisam desses campos
                 assuntoGroup.style.display = 'none';
                 creditosGroup.style.display = 'none';
             }
         }
 
-        // Função para gerar post
-        async function generatePost() {
-            // Para watermark, não precisa de título
-            if (selectedTemplate !== 'watermark') {
-                const titulo = document.getElementById('titulo').value;
-                if (!titulo) {
-                    showError('O título é obrigatório.', 'post');
-                    return;
-                }
-            }
-            
-            // Verificar se é template de Feed (precisa de assunto e créditos)
-            if (selectedTemplate.includes('feed')) {
-                const assunto = document.getElementById('assunto').value;
-                const creditos = document.getElementById('creditos').value;
+        // API call helper
+        async function sendToAPI(action, data, file = null) {
+            try {
+                console.log(`Sending to API: ${action}`);
                 
-                if (!assunto || !creditos) {
-                    showError('Para templates de Feed, assunto e nome do fotógrafo são obrigatórios.', 'post');
-                    return;
+                let formData = new FormData();
+                formData.append('action', action);
+                formData.append('data', JSON.stringify(data));
+                
+                if (file) {
+                    formData.append('file', file);
                 }
+                
+                const response = await fetch('/api/process', {
+                    method: 'POST',
+                    body: formData,
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                return await response.json();
+            } catch (error) {
+                console.error('API error:', error);
+                return { success: false, message: 'Error processing request' };
             }
-            
+        }
+
+        // Check image status
+        async function checkImageStatus(imageId, type) {
+            try {
+                const response = await fetch(`/api/check-image/${imageId}`);
+                const result = await response.json();
+                
+                if (result.success && result.status === 'finished' && result.imageUrl) {
+                    generatedImageUrls[type] = result.imageUrl;
+                    const preview = document.getElementById(`${type}-preview`);
+                    preview.innerHTML = `<img src="${result.imageUrl}" style="max-width: 100%; max-height: 300px; border-radius: 10px; object-fit: contain;">`;
+                    showSuccess(`${type === 'post' ? 'Post' : 'Watermark'} finalizado com sucesso!`, type);
+                    
+                    // Show download button and open link
+                    const downloadBtn = document.getElementById(`download-${type}-btn`);
+                    const openBtn = document.getElementById(`open-${type}-image`);
+                    
+                    if (downloadBtn) downloadBtn.style.display = 'inline-block';
+                    if (openBtn) {
+                        openBtn.href = result.imageUrl;
+                        openBtn.style.display = 'inline-block';
+                    }
+                } else if (result.success && result.status === 'processing') {
+                    setTimeout(() => checkImageStatus(imageId, type), 3000);
+                } else {
+                    showError(`Erro ao processar ${type}`, type);
+                }
+            } catch (error) {
+                console.error('Error checking status:', error);
+                showError(`Erro ao verificar status`, type);
+            }
+        }
+
+        // Generate post
+        async function generatePost() {
             if (!uploadedFiles.post) {
                 showError('Por favor, faça upload de um arquivo primeiro.', 'post');
                 return;
             }
             
+            const titulo = document.getElementById('titulo').value.trim();
+            const assunto = document.getElementById('assunto').value.trim();
+            const creditos = document.getElementById('creditos').value.trim();
+            
+            // Validate required fields based on template
+            if (selectedTemplate.includes('feed') && (!titulo || !assunto || !creditos)) {
+                showError('Para templates de Feed, título, assunto e créditos são obrigatórios.', 'post');
+                return;
+            }
+            
+            if (!selectedTemplate.includes('feed') && !selectedTemplate.includes('watermark') && !titulo) {
+                showError('O título é obrigatório.', 'post');
+                return;
+            }
+            
             showLoading('post');
             
-            // Usar sempre a mesma API para todos os templates
-            const apiAction = 'generate_post';
-            
-            const apiResult = await sendToAPI(apiAction, {
-                fileType: uploadedFiles.post.type,
-                fileName: uploadedFiles.post.name,
-                format: selectedFormat,
+            const apiResult = await sendToAPI('generate_post', {
                 template: selectedTemplate,
-                title: selectedTemplate === 'watermark' ? '' : document.getElementById('titulo').value,
-                subject: selectedFormat === 'feed' ? document.getElementById('assunto').value : 'N/A',
-                credits: selectedFormat === 'feed' ? document.getElementById('creditos').value : 'N/A'
-            });
+                title: titulo,
+                subject: assunto,
+                credits: creditos
+            }, uploadedFiles.post);
 
             hideLoading('post');
-            if (apiResult && apiResult.success) {
+            
+            if (apiResult.success) {
                 if (apiResult.imageUrl) {
                     generatedImageUrls.post = apiResult.imageUrl;
                     const preview = document.getElementById('post-preview');
-                    preview.innerHTML = `<img src="${apiResult.imageUrl}" style="max-width: 100%; max-height: 300px; border-radius: 10px;">`;
+                    preview.innerHTML = `<img src="${apiResult.imageUrl}" style="max-width: 100%; max-height: 300px; border-radius: 10px; object-fit: contain;">`;
                     showSuccess('Post gerado com sucesso!', 'post');
+                    
+                    document.getElementById('download-post-btn').style.display = 'inline-block';
                     document.getElementById('open-post-image').href = apiResult.imageUrl;
                     document.getElementById('open-post-image').style.display = 'inline-block';
                 } else if (apiResult.imageId) {
                     showSuccess('Post em processamento. Aguarde...', 'post');
-                    // Verificar status periodicamente
                     checkImageStatus(apiResult.imageId, 'post');
-                } else {
-                    showSuccess('Post processado com sucesso!', 'post');
                 }
-                generatedContent.post = true;
             } else {
-                showError('Erro ao gerar post.', 'post');
+                showError(apiResult.message || 'Erro ao gerar post', 'post');
             }
         }
 
-        // Função para gerar título com IA
+        // Generate title
         async function generateTitle() {
-            const texto = document.getElementById('noticia-texto').value;
-            if (!texto.trim()) {
-                showError('Por favor, insira o texto da notícia ou link.', 'title');
+            const texto = document.getElementById('noticia-texto').value.trim();
+            if (!texto) {
+                showError('Por favor, insira o texto da notícia.', 'title');
                 return;
             }
             
@@ -1358,36 +1875,35 @@ HTML_TEMPLATE = """
             });
 
             hideLoading('title');
-            if (apiResult && apiResult.success && apiResult.suggestedTitle) {
+            
+            if (apiResult.success && apiResult.suggestedTitle) {
                 document.getElementById('suggested-title').innerHTML = `<p><strong>${apiResult.suggestedTitle}</strong></p>`;
                 document.getElementById('title-suggestions').style.display = 'block';
                 showSuccess('Título gerado com sucesso!', 'title');
             } else {
-                showError('Erro ao gerar título.', 'title');
+                showError(apiResult.message || 'Erro ao gerar título', 'title');
             }
         }
 
-        // Função para aceitar título sugerido
+        // Accept/reject title
         function acceptTitle() {
-            const suggestedTitle = document.getElementById('suggested-title').textContent.replace('Título sugerido aparecerá aqui', '').trim();
+            const suggestedTitle = document.getElementById('suggested-title').textContent.trim();
             document.getElementById('manual-title-input').value = suggestedTitle;
             document.getElementById('manual-title').style.display = 'block';
             document.getElementById('title-suggestions').style.display = 'none';
-            showSuccess('Título aceito e pronto para salvar!', 'title');
+            showSuccess('Título aceito!', 'title');
         }
 
-        // Função para recusar título sugerido
         function rejectTitle() {
             document.getElementById('manual-title').style.display = 'block';
             document.getElementById('title-suggestions').style.display = 'none';
             document.getElementById('manual-title-input').value = '';
-            showError('Título recusado. Digite um título manualmente.', 'title');
+            showError('Título recusado. Digite manualmente.', 'title');
         }
 
-        // Função para salvar título manual
         async function saveManualTitle() {
-            const manualTitle = document.getElementById('manual-title-input').value;
-            if (!manualTitle.trim()) {
+            const manualTitle = document.getElementById('manual-title-input').value.trim();
+            if (!manualTitle) {
                 showError('Por favor, digite um título.', 'title');
                 return;
             }
@@ -1398,72 +1914,60 @@ HTML_TEMPLATE = """
             });
 
             hideLoading('title');
-            if (apiResult && apiResult.success) {
+            
+            if (apiResult.success) {
                 showSuccess('Título salvo com sucesso!', 'title');
-                generatedContent.title = manualTitle;
             } else {
-                showError('Erro ao salvar título.', 'title');
+                showError(apiResult.message || 'Erro ao salvar título', 'title');
             }
         }
 
-        // Função para gerar legendas com IA
+        // Generate captions
         async function generateCaptions() {
-            console.log('DEBUG - Iniciando geração de legendas');
-            const texto = document.getElementById('legenda-texto').value;
-            console.log('DEBUG - Texto capturado:', texto.substring(0, 100));
-            
-            if (!texto.trim()) {
-                console.log('DEBUG - Texto vazio, mostrando erro');
-                showError('Por favor, insira o texto da notícia ou link.', 'caption');
+            const texto = document.getElementById('legenda-texto').value.trim();
+            if (!texto) {
+                showError('Por favor, insira o texto da notícia.', 'caption');
                 return;
             }
             
-            console.log('DEBUG - Mostrando loading');
             showLoading('caption');
             document.getElementById('caption-suggestions').style.display = 'none';
 
-            console.log('DEBUG - Enviando para API');
             const apiResult = await sendToAPI('generate_captions_ai', {
                 content: texto
             });
 
-            console.log('DEBUG - Resultado da API:', apiResult);
             hideLoading('caption');
             
-            if (apiResult && apiResult.success && apiResult.captions) {
-                console.log('DEBUG - Sucesso! Exibindo legenda');
-                // Pegar apenas a primeira legenda para exibir
+            if (apiResult.success && apiResult.captions && apiResult.captions.length > 0) {
                 const firstCaption = apiResult.captions[0];
                 document.getElementById('suggested-caption').innerHTML = `<p><strong>${firstCaption}</strong></p>`;
                 document.getElementById('caption-suggestions').style.display = 'block';
                 showSuccess('Legenda gerada com sucesso!', 'caption');
             } else {
-                console.log('DEBUG - Erro na API ou resposta inválida');
-                showError('Erro ao gerar legenda.', 'caption');
+                showError(apiResult.message || 'Erro ao gerar legenda', 'caption');
             }
         }
 
-        // Função para aceitar legenda sugerida
+        // Accept/reject caption
         function acceptCaption() {
-            const suggestedCaption = document.getElementById('suggested-caption').textContent.replace('Legenda sugerida aparecerá aqui', '').trim();
+            const suggestedCaption = document.getElementById('suggested-caption').textContent.trim();
             document.getElementById('manual-caption-input').value = suggestedCaption;
             document.getElementById('manual-caption').style.display = 'block';
             document.getElementById('caption-suggestions').style.display = 'none';
-            showSuccess('Legenda aceita e pronta para salvar!', 'caption');
+            showSuccess('Legenda aceita!', 'caption');
         }
 
-        // Função para recusar legenda sugerida
         function rejectCaption() {
             document.getElementById('manual-caption').style.display = 'block';
             document.getElementById('caption-suggestions').style.display = 'none';
             document.getElementById('manual-caption-input').value = '';
-            showError('Legenda recusada. Digite uma legenda manualmente.', 'caption');
+            showError('Legenda recusada. Digite manualmente.', 'caption');
         }
 
-        // Função para salvar legenda manual
         async function saveManualCaption() {
-            const manualCaption = document.getElementById('manual-caption-input').value;
-            if (!manualCaption.trim()) {
+            const manualCaption = document.getElementById('manual-caption-input').value.trim();
+            if (!manualCaption) {
                 showError('Por favor, digite uma legenda.', 'caption');
                 return;
             }
@@ -1474,19 +1978,19 @@ HTML_TEMPLATE = """
             });
 
             hideLoading('caption');
-            if (apiResult && apiResult.success) {
+            
+            if (apiResult.success) {
                 showSuccess('Legenda salva com sucesso!', 'caption');
-                generatedContent.caption = manualCaption;
             } else {
-                showError('Erro ao salvar legenda.', 'caption');
+                showError(apiResult.message || 'Erro ao salvar legenda', 'caption');
             }
         }
 
-        // Função para reescrever notícia com IA
+        // Rewrite news
         async function rewriteNews() {
-            const texto = document.getElementById('noticia-original').value;
-            if (!texto.trim()) {
-                showError('Por favor, insira o texto da notícia original.', 'rewrite');
+            const texto = document.getElementById('noticia-original').value.trim();
+            if (!texto) {
+                showError('Por favor, insira o texto da notícia.', 'rewrite');
                 return;
             }
             
@@ -1498,18 +2002,19 @@ HTML_TEMPLATE = """
             });
 
             hideLoading('rewrite');
-            if (apiResult && apiResult.success && apiResult.rewrittenNews) {
+            
+            if (apiResult.success && apiResult.rewrittenNews) {
                 const rewrittenNews = apiResult.rewrittenNews;
                 document.getElementById('rewritten-title').textContent = rewrittenNews.titulo;
                 document.getElementById('rewritten-text').textContent = rewrittenNews.texto;
                 document.getElementById('rewrite-suggestions').style.display = 'block';
                 showSuccess('Notícia reescrita com sucesso!', 'rewrite');
             } else {
-                showError('Erro ao reescrever notícia.', 'rewrite');
+                showError(apiResult.message || 'Erro ao reescrever notícia', 'rewrite');
             }
         }
 
-        // Função para aceitar notícia reescrita
+        // Accept/reject rewritten news
         function acceptRewrittenNews() {
             const rewrittenTitle = document.getElementById('rewritten-title').textContent;
             const rewrittenText = document.getElementById('rewritten-text').textContent;
@@ -1518,10 +2023,9 @@ HTML_TEMPLATE = """
             document.getElementById('manual-text-rewrite').value = rewrittenText;
             document.getElementById('manual-rewrite').style.display = 'block';
             document.getElementById('rewrite-suggestions').style.display = 'none';
-            showSuccess('Notícia aceita e pronta para salvar!', 'rewrite');
+            showSuccess('Notícia aceita!', 'rewrite');
         }
 
-        // Função para recusar notícia reescrita
         function rejectRewrittenNews() {
             document.getElementById('manual-rewrite').style.display = 'block';
             document.getElementById('rewrite-suggestions').style.display = 'none';
@@ -1530,12 +2034,11 @@ HTML_TEMPLATE = """
             showError('Notícia recusada. Digite uma versão personalizada.', 'rewrite');
         }
 
-        // Função para salvar notícia reescrita manual
         async function saveManualRewrite() {
-            const manualTitle = document.getElementById('manual-title-rewrite').value;
-            const manualText = document.getElementById('manual-text-rewrite').value;
+            const manualTitle = document.getElementById('manual-title-rewrite').value.trim();
+            const manualText = document.getElementById('manual-text-rewrite').value.trim();
             
-            if (!manualTitle.trim() || !manualText.trim()) {
+            if (!manualTitle || !manualText) {
                 showError('Por favor, preencha título e texto.', 'rewrite');
                 return;
             }
@@ -1547,46 +2050,36 @@ HTML_TEMPLATE = """
             });
 
             hideLoading('rewrite');
-            if (apiResult && apiResult.success) {
-                showSuccess('Notícia reescrita salva com sucesso!', 'rewrite');
-                generatedContent.rewrite = { title: manualTitle, text: manualText };
+            
+            if (apiResult.success) {
+                showSuccess('Notícia salva com sucesso!', 'rewrite');
             } else {
-                showError('Erro ao salvar notícia reescrita.', 'rewrite');
+                showError(apiResult.message || 'Erro ao salvar notícia', 'rewrite');
             }
         }
 
-        // Função para download de arquivos
+        // Download file
         function downloadFile(type) {
-            let url = '';
-            let filename = '';
-
-            if (type === 'watermark' && generatedImageUrls.watermark) {
-                url = generatedImageUrls.watermark;
-                filename = `watermarked_image_${new Date().getTime()}.png`;
-            } else if (type === 'post' && generatedImageUrls.post) {
-                url = generatedImageUrls.post;
-                filename = `instagram_post_${new Date().getTime()}.png`;
-            } else {
+            const url = generatedImageUrls[type];
+            if (!url) {
                 showError('Nenhum arquivo gerado para download.', type);
                 return;
             }
 
-            // Se a URL for um Data URL, crie um link para download
             if (url.startsWith('data:')) {
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = filename;
+                a.download = `${type}_${new Date().getTime()}.png`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
             } else {
-                // Se for uma URL externa, redirecione para download (ou abra em nova aba)
                 window.open(url, '_blank');
             }
             showSuccess('Download iniciado!', type);
         }
 
-        // Funções de feedback (loading, success, error)
+        // UI feedback functions
         function showLoading(type) {
             document.getElementById(`${type}-loading`).style.display = 'block';
             document.getElementById(`${type}-success`).style.display = 'none';
@@ -1602,6 +2095,11 @@ HTML_TEMPLATE = """
             successElement.textContent = message;
             successElement.style.display = 'block';
             document.getElementById(`${type}-error`).style.display = 'none';
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                successElement.style.display = 'none';
+            }, 5000);
         }
 
         function showError(message, type) {
@@ -1609,589 +2107,27 @@ HTML_TEMPLATE = """
             errorElement.textContent = message;
             errorElement.style.display = 'block';
             document.getElementById(`${type}-success`).style.display = 'none';
+            
+            // Auto-hide after 10 seconds
+            setTimeout(() => {
+                errorElement.style.display = 'none';
+            }, 10000);
         }
-
     </script>
 </body>
 </html>
 """
 
-@app.route('/')
-def index():
-    return render_template_string(HTML_TEMPLATE)
-
-@app.route('/test-placid')
-def test_placid():
-    """Testa a conexão com a API do Placid"""
-    try:
-        # Teste simples com template conhecido
-        test_payload = {
-            'template_uuid': 'qe0qo74vbrgxe',  # feed_1_red
-            'layers': {
-                'imgprincipal': {
-                    'image': 'https://via.placeholder.com/1200x1200/FF0000/FFFFFF?text=TESTE'
-                }
-            },
-            'create_now': True
-        }
-        
-        headers = {
-            'Authorization': f'Bearer {PLACID_API_TOKEN}',
-            'Content-Type': 'application/json'
-        }
-        
-        print(f"TESTE - Enviando para Placid: {test_payload}")
-        response = requests.post(PLACID_API_URL, json=test_payload, headers=headers)
-        print(f"TESTE - Status: {response.status_code}")
-        print(f"TESTE - Response: {response.text}")
-        
-        if response.status_code == 200:
-            return f"✅ Placid funcionando! Status: {response.status_code}<br>Response: {response.text}"
-        else:
-            return f"❌ Erro no Placid! Status: {response.status_code}<br>Response: {response.text}"
-            
-    except Exception as e:
-        return f"❌ Erro na conexão: {e}"
-
-@app.route('/api/process', methods=['POST'])
-def process_request():
-    # Verificar se é FormData ou JSON
-    if request.form:
-        action = request.form.get('action')
-        data_str = request.form.get('data')
-        payload = json.loads(data_str) if data_str else {}
-    else:
-        data = request.json
-        action = data.get('action')
-        payload = data.get('data')
-
-    print(f"[{datetime.now()}] Processamento recebido - Ação: {action}")
-
-    response_data = {"success": False}
-
-    if action == 'apply_watermark':
-        return process_watermark(payload, request)
-    elif action == 'generate_post':
-        return process_generate_post(payload, request)
-    elif action == 'generate_title_ai':
-        return process_generate_title(payload)
-    elif action == 'generate_captions_ai':
-        return process_generate_captions(payload)
-    elif action == 'rewrite_news_ai':
-        return process_rewrite_news(payload)
-    elif action == 'save_manual_caption':
-        return process_save_caption(payload)
-    elif action == 'save_manual_rewrite':
-        return process_save_rewrite(payload)
-    elif action == 'save_manual_title':
-        return process_save_title(payload)
-    else:
-        response_data['message'] = f"Ação não reconhecida: {action}"
-        return jsonify(response_data), 400
-
-def process_watermark(payload, request):
-    """Processa aplicação de marca d'água usando Placid - usando a mesma lógica dos outros templates"""
-    response_data = {"success": False}
-    
-    # Verificar se há arquivo
-    if hasattr(request, 'files') and request.files:
-        file = request.files.get('file')
-        if file and file.filename:
-            try:
-                # Salvar arquivo temporariamente
-                timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-                ext = file.filename.split('.')[-1].lower()
-                if ext not in ['jpg', 'jpeg', 'png', 'gif']:
-                    ext = 'jpg'
-                
-                unique_filename = f"watermark_{timestamp}.{ext}"
-                file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
-                file.save(file_path)
-                
-                # URL pública do arquivo
-                public_file_url = f"{request.url_root}uploads/{unique_filename}"
-                
-                # Usar a mesma lógica dos outros templates
-                template_key = 'watermark'
-                template_info = PLACID_TEMPLATES[template_key]
-                template_uuid = template_info['uuid']
-                template_type = template_info.get('type', 'watermark')
-                template_dimensions = template_info.get('dimensions', {'width': 1080, 'height': 1080})
-                
-                # Configurar layers - apenas imgprincipal para watermark
-                layers = {
-                    "imgprincipal": {
-                        "image": public_file_url
-                    }
-                }
-                
-                # Modificações baseadas no template selecionado (mesma lógica dos outros templates)
-                modifications = {
-                    "filename": f"watermark_{timestamp}.png",
-                    "width": template_dimensions['width'],
-                    "height": template_dimensions['height'],
-                    "image_format": "auto",  # jpg/png automático
-                    "dpi": 72,  # DPI da imagem
-                    "color_mode": "rgb"  # Cor RGB
-                }
-                
-                # Criar imagem no Placid (mesma lógica dos outros templates)
-                print(f"Criando watermark no Placid com template: {template_uuid} ({PLACID_TEMPLATES[template_key]['name']})")
-                image_result = create_placid_image(
-                    template_uuid=template_uuid,
-                    layers=layers,
-                    modifications=modifications
-                )
-                
-                if image_result:
-                    image_id = image_result.get('id')
-                    print(f"Watermark criado com ID: {image_id}")
-                    
-                    # Verificar se a imagem já está pronta (create_now: True)
-                    if image_result.get('image_url'):
-                        response_data['success'] = True
-                        response_data['imageUrl'] = image_result['image_url']
-                        response_data['message'] = "Marca d'água aplicada com sucesso!"
-                        print(f"Watermark finalizado: {image_result['image_url']}")
-                    else:
-                        # Se não estiver pronta, retornar o ID para verificação posterior
-                        response_data['success'] = True
-                        response_data['imageId'] = image_id
-                        response_data['message'] = "Watermark em processamento. Use o ID para verificar status."
-                        print(f"Watermark em processamento: {image_id}")
-                else:
-                    response_data['message'] = "Erro ao criar watermark no Placid"
-                    
-            except Exception as e:
-                print(f"Erro ao processar watermark: {e}")
-                response_data['message'] = f"Erro ao processar arquivo: {e}"
-                return jsonify(response_data), 500
-        else:
-            response_data['message'] = "Nenhum arquivo encontrado"
-            return jsonify(response_data), 400
-    else:
-        response_data['message'] = "Nenhum arquivo enviado"
-        return jsonify(response_data), 400
-    
-    return jsonify(response_data)
-
-def process_generate_post(payload, request):
-    """Processa geração de post usando Placid"""
-    response_data = {"success": False}
-    
-    # Verificar se há arquivo
-    if hasattr(request, 'files') and request.files:
-        file = request.files.get('file')
-        if file and file.filename:
-            try:
-                # Configurar layers baseado no formato e template (definir variáveis primeiro)
-                format_type = payload.get('format', 'reels')
-                template_key = payload.get('template', 'feed_1_red')
-                title = payload.get('title', '')
-                subject = payload.get('subject', '')
-                credits = payload.get('credits', '')
-                
-                # Salvar arquivo temporariamente
-                timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-                ext = file.filename.split('.')[-1].lower()
-                if ext not in ['jpg', 'jpeg', 'png', 'gif']:
-                    ext = 'jpg'
-                
-                unique_filename = f"post_{timestamp}.{ext}"
-                file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
-                file.save(file_path)
-                
-                # URL pública do arquivo - usar uploads direto
-                public_file_url = f"{request.url_root}uploads/{unique_filename}"
-                print(f"DEBUG - Link público gerado: {public_file_url}")
-                
-                # DEBUG: Logs para debugar
-                print(f"DEBUG - Arquivo salvo: {unique_filename}")
-                print(f"DEBUG - URL pública: {public_file_url}")
-                print(f"DEBUG - Template selecionado: {payload.get('template', 'N/A')}")
-                print(f"DEBUG - Formato: {payload.get('format', 'N/A')}")
-                
-                # Verificar se o template existe
-                if template_key not in PLACID_TEMPLATES:
-                    print(f"ERRO - Template '{template_key}' não encontrado!")
-                    print(f"Templates disponíveis: {list(PLACID_TEMPLATES.keys())}")
-                    template_key = 'feed_1_red'  # Fallback
-                    print(f"DEBUG - Usando fallback: {template_key}")
-                
-                template_info = PLACID_TEMPLATES[template_key]
-                template_uuid = template_info['uuid']
-                template_type = template_info.get('type', 'feed')
-                template_dimensions = template_info.get('dimensions', {'width': 1080, 'height': 1080})
-                
-                print(f"DEBUG - Template info: {template_info}")
-                print(f"DEBUG - Template UUID: {template_uuid}")
-                print(f"DEBUG - Template type: {template_type}")
-                
-                # Configurar layers baseado no tipo de template
-                layers = {
-                    "imgprincipal": {
-                        "image": public_file_url
-                    }
-                }
-                
-                # Debug: verificar template_type
-                print(f"Template selecionado: {template_key}, Tipo: {template_type}")
-                
-                # Usar o mesmo sistema do feed - modelo 1 (red) para todos os templates
-                # Apenas mudando os layers específicos de cada template
-                
-                if template_type == 'watermark':
-                    # Template de watermark: usar EXATAMENTE a mesma forma do feed - modelo 1 (red)
-                    print("Configurando layers para watermark: usando sistema IDÊNTICO ao feed")
-                    layers["titulocopy"] = {"text": title}
-                    if subject:
-                        layers["assuntext"] = {"text": subject}
-                    if credits:
-                        layers["creditfoto"] = {"text": f"FOTO: {credits}"}
-                    layers["credit"] = {"text": "Créditos gerais"}
-                elif template_type == 'feed':
-                    # Templates de Feed: usar sistema completo do feed - modelo 1 (red)
-                    print("Configurando layers para feed")
-                    layers["titulocopy"] = {"text": title}
-                    if subject:
-                        layers["assuntext"] = {"text": subject}
-                    if credits:
-                        layers["creditfoto"] = {"text": f"FOTO: {credits}"}
-                    layers["credit"] = {"text": "Créditos gerais"}
-                elif template_type == 'story':
-                    # Templates de Story: usar sistema do feed + layers específicos
-                    print("Configurando layers para story")
-                    layers["titulocopy"] = {"text": title}
-                    layers["imgfundo"] = {"image": "https://via.placeholder.com/1080x1920/FF0000/FFFFFF?text=FUNDO+VERMELHO"}
-                else:
-                    # Templates de Reels: usar sistema do feed + layers específicos
-                    print("Configurando layers para reels")
-                    layers["titulocopy"] = {"text": title}
-                
-                print(f"DEBUG - Layers finais: {layers}")
-                print(f"DEBUG - URL da imagem no layer imgprincipal: {layers.get('imgprincipal', {}).get('image', 'NÃO ENCONTRADA')}")
-                
-                # Verificar se o arquivo local existe
-                if os.path.exists(file_path):
-                    print(f"DEBUG - ✅ Arquivo local existe: {file_path}")
-                    print(f"DEBUG - ✅ Tamanho do arquivo: {os.path.getsize(file_path)} bytes")
-                else:
-                    print(f"DEBUG - ❌ Arquivo local NÃO existe: {file_path}")
-                
-                # Modificações baseadas no template selecionado
-                modifications = {
-                    "filename": f"instagram_{template_type}_{timestamp}.png",
-                    "width": template_dimensions['width'],
-                    "height": template_dimensions['height'],
-                    "image_format": "auto",  # jpg/png automático
-                    "dpi": 72,  # DPI da imagem
-                    "color_mode": "rgb"  # Cor RGB
-                }
-                
-                # Criar imagem no Placid
-                print(f"DEBUG - Criando post no Placid com template: {template_uuid} ({PLACID_TEMPLATES[template_key]['name']})")
-                print(f"DEBUG - Enviando para Placid - Layers: {layers}")
-                print(f"DEBUG - Enviando para Placid - Modifications: {modifications}")
-                image_result = create_placid_image(
-                    template_uuid=template_uuid,
-                    layers=layers,
-                    modifications=modifications
-                )
-                
-                if image_result:
-                    image_id = image_result.get('id')
-                    print(f"Post criado com ID: {image_id}")
-                    
-                    # Verificar se a imagem já está pronta (create_now: True)
-                    if image_result.get('image_url'):
-                        response_data['success'] = True
-                        response_data['imageUrl'] = image_result['image_url']
-                        response_data['message'] = "Post gerado com sucesso!"
-                        print(f"Post finalizado: {image_result['image_url']}")
-                    else:
-                        # Se não estiver pronta, retornar o ID para verificação posterior
-                        response_data['success'] = True
-                        response_data['imageId'] = image_id
-                        response_data['message'] = "Post em processamento. Use o ID para verificar status."
-                        print(f"Post em processamento: {image_id}")
-                else:
-                    response_data['message'] = "Erro ao criar post no Placid"
-                    
-            except Exception as e:
-                print(f"Erro ao processar post: {e}")
-                response_data['message'] = f"Erro ao processar arquivo: {e}"
-                return jsonify(response_data), 500
-        else:
-            response_data['message'] = "Nenhum arquivo encontrado"
-            return jsonify(response_data), 400
-    else:
-        response_data['message'] = "Nenhum arquivo enviado"
-        return jsonify(response_data), 400
-    
-    return jsonify(response_data)
-
-def process_generate_title(payload):
-    """Processa geração de título com IA usando prompt específico e API Groq"""
-    response_data = {"success": False}
-    
-    news_content = payload.get('newsContent', '')
-    if not news_content.strip():
-        response_data['message'] = "Conteúdo da notícia é obrigatório"
-        return jsonify(response_data), 400
-    
-    # Usar o prompt específico para títulos
-    prompt = AI_PROMPTS['titulo']
-    
-    # Chamar API Groq para gerar título
-    suggested_title = call_groq_api(prompt, news_content, max_tokens=200)
-    
-    if suggested_title:
-        response_data['success'] = True
-        response_data['suggestedTitle'] = suggested_title
-        response_data['message'] = "Título gerado com sucesso usando IA Groq!"
-    else:
-        # Fallback para exemplos pré-definidos em caso de erro
-        import random
-        sample_titles = [
-            "EXCLUSIVO: Casos De Dengue DISPARAM Em Maceió E Hospital Soa Alerta...",
-            "URGENTE: MPF Impõe Regras Mais Rígidas Para Construções Na Orla...",
-            "CONFIRMADO: Motoristas De Aplicativo Precisam Regularizar MEI...",
-            "Tribuna Hoje: Nova Descoberta REVOLUCIONA Tratamento De Doenças...",
-            "Alagoas: Especialistas Alertam Para Impacto Das Mudanças Climáticas..."
-        ]
-        suggested_title = random.choice(sample_titles)
-        response_data['success'] = True
-        response_data['suggestedTitle'] = suggested_title
-        response_data['message'] = "Título gerado com sucesso (modo fallback)!"
-    
-    return jsonify(response_data)
-
-def process_generate_captions(payload):
-    """Processa geração de legendas com IA usando prompt específico e API Groq"""
-    response_data = {"success": False}
-    
-    content = payload.get('content', '')
-    if not content.strip():
-        response_data['message'] = "Conteúdo é obrigatório"
-        return jsonify(response_data), 400
-    
-    print(f"DEBUG - Gerando legendas para conteúdo: {content[:100]}...")
-    
-    # Usar o prompt específico para legendas
-    prompt = AI_PROMPTS['legendas']
-    
-    # Chamar API Groq para gerar legendas
-    generated_caption = call_groq_api(prompt, content, max_tokens=500)
-    
-    if generated_caption:
-        print(f"DEBUG - Legenda gerada pela IA: {generated_caption[:100]}...")
-        # Gerar múltiplas variações
-        captions = [generated_caption]
-        
-        # Gerar mais 2 variações
-        for i in range(2):
-            variation = call_groq_api(prompt, content, max_tokens=500)
-            if variation and variation not in captions:
-                captions.append(variation)
-                print(f"DEBUG - Variação {i+1} gerada")
-        
-        response_data['success'] = True
-        response_data['captions'] = captions
-        response_data['message'] = "Legendas geradas com sucesso usando IA Groq!"
-    else:
-        print("DEBUG - Usando fallback para legendas")
-        # Fallback para exemplos pré-definidos em caso de erro
-        sample_captions = [
-            "🚨 URGENTE: Casos de dengue disparam em Maceió e preocupam autoridades!\n\nO Hospital Universitário registrou aumento de 150% nos atendimentos na última semana. A situação preocupa especialistas que alertam para possível epidemia.\n\n#TribunaHoje #Alagoas #Maceió #Dengue #Saúde\n\n📱 Acesse o link na bio para a matéria completa!",
-            
-            "📊 EXCLUSIVO: MPF impõe regras mais rígidas para construções na orla!\n\nA medida visa proteger o meio ambiente e garantir desenvolvimento sustentável na região. Empresários terão 90 dias para se adequar.\n\n#TribunaHoje #Alagoas #BarraDeSãoMiguel #MeioAmbiente\n\n💬 O que você acha dessa decisão? Comente abaixo!",
-            
-            "⚡ CONFIRMADO: Motoristas de aplicativo precisam regularizar MEI!\n\nNova legislação exige documentação em dia para garantir isenção do IPVA. Prazo limite é 31 de dezembro.\n\n#TribunaHoje #Alagoas #MEI #IPVA #Motoristas\n\n🔗 Saiba mais no link da bio!",
-            
-            "🏥 Tribuna Hoje: Hospital de Maceió investe em equipamentos de última geração!\n\nInvestimento de R$ 2 milhões vai melhorar atendimento para mais de 50 mil pacientes por mês. Expectativa é reduzir filas em 40%.\n\n#TribunaHoje #Alagoas #Maceió #Saúde #Investimento\n\n📱 Compartilhe essa notícia!",
-            
-            "🌊 Alagoas: Chuvas intensas causam alagamentos em 15 bairros de Maceió!\n\nDefesa Civil emite alerta para população. Previsão é de mais chuvas nos próximos dias. Evite áreas de risco.\n\n#TribunaHoje #Alagoas #Maceió #Chuvas #Alagamentos\n\n⚠️ Fique atento aos alertas oficiais!"
-        ]
-        
-        response_data['success'] = True
-        response_data['captions'] = sample_captions
-        response_data['message'] = "Legendas geradas com sucesso (modo fallback)!"
-    
-    print(f"DEBUG - Retornando {len(response_data.get('captions', []))} legendas")
-    return jsonify(response_data)
-
-def process_rewrite_news(payload):
-    """Processa reescrita de notícias com IA usando prompt específico e API Groq"""
-    response_data = {"success": False}
-    
-    news_content = payload.get('newsContent', '')
-    if not news_content.strip():
-        response_data['message'] = "Conteúdo da notícia é obrigatório"
-        return jsonify(response_data), 400
-    
-    # Usar o prompt específico para reescrita
-    prompt = AI_PROMPTS['reescrita']
-    
-    # Chamar API Groq para reescrever notícia
-    rewritten_content = call_groq_api(prompt, news_content, max_tokens=1500)
-    
-    if rewritten_content:
-        # Separar título e texto (assumindo que o primeiro parágrafo é o título)
-        lines = rewritten_content.strip().split('\n')
-        title = lines[0].strip()
-        text = '\n'.join(lines[1:]).strip()
-        
-        # Se não conseguir separar, usar o conteúdo completo como texto
-        if not text:
-            text = rewritten_content
-            title = "Notícia Reescrita"
-        
-        rewritten_news = {
-            "titulo": title,
-            "texto": text
-        }
-        
-        response_data['success'] = True
-        response_data['rewrittenNews'] = rewritten_news
-        response_data['message'] = "Notícia reescrita com sucesso usando IA Groq!"
-    else:
-        # Fallback para exemplos pré-definidos em caso de erro
-        import random
-        sample_news = [
-            {
-                "titulo": "Alfredo Gaspar assume relatoria da CPMI que investiga fraudes no INSS",
-                "texto": "O deputado federal Alfredo Gaspar (União Brasil-AL) foi designado relator da Comissão Parlamentar Mista de Inquérito (CPMI) que apura possíveis fraudes no Instituto Nacional do Seguro Social (INSS). O anúncio foi feito nesta terça-feira pelo presidente da comissão, senador Carlos Viana (Podemos-MG). Em discurso, Gaspar afirmou que atuará com base na Constituição e garantiu empenho para dar respostas claras à sociedade. A CPMI foi instalada após denúncias de irregularidades em benefícios previdenciários que podem ter causado prejuízos de bilhões aos cofres públicos. O relatório final deve ser apresentado em 120 dias, com possibilidade de prorrogação por mais 60 dias."
-            },
-            {
-                "titulo": "Hospital de Maceió registra aumento de 150% nos casos de dengue",
-                "texto": "O Hospital Universitário Professor Alberto Antunes (Hupaa) registrou aumento de 150% nos atendimentos de casos suspeitos de dengue na última semana, segundo dados divulgados pela Secretaria de Estado da Saúde (Sesau). O crescimento preocupa autoridades sanitárias que alertam para possível epidemia na capital alagoana. A diretora do hospital, Dra. Maria Silva, informou que foram atendidos 45 casos suspeitos nos últimos sete dias, contra 18 na semana anterior. A Sesau orienta a população a eliminar criadouros do mosquito Aedes aegypti e procurar atendimento médico aos primeiros sintomas da doença."
-            }
-        ]
-        
-        selected_news = random.choice(sample_news)
-        response_data['success'] = True
-        response_data['rewrittenNews'] = selected_news
-        response_data['message'] = "Notícia reescrita com sucesso (modo fallback)!"
-    
-    return jsonify(response_data)
-
-def process_save_caption(payload):
-    """Processa salvamento de legenda manual"""
-    response_data = {"success": False}
-    
-    manual_caption = payload.get('manualCaption', '')
-    if not manual_caption.strip():
-        response_data['message'] = "Legenda é obrigatória"
-        return jsonify(response_data), 400
-    
-    # Aqui você pode salvar a legenda em um banco de dados
-    print(f"Legenda salva: {manual_caption[:100]}...")
-    
-    response_data['success'] = True
-    response_data['message'] = "Legenda salva com sucesso!"
-    
-    return jsonify(response_data)
-
-def process_save_rewrite(payload):
-    """Processa salvamento de reescrita manual"""
-    response_data = {"success": False}
-    
-    manual_title = payload.get('manualTitle', '')
-    manual_text = payload.get('manualText', '')
-    
-    if not manual_title.strip() or not manual_text.strip():
-        response_data['message'] = "Título e texto são obrigatórios"
-        return jsonify(response_data), 400
-    
-    # Aqui você pode salvar a reescrita em um banco de dados
-    print(f"Reescrita salva - Título: {manual_title}")
-    print(f"Reescrita salva - Texto: {manual_text[:100]}...")
-    
-    response_data['success'] = True
-    response_data['message'] = "Notícia reescrita salva com sucesso!"
-    
-    return jsonify(response_data)
-
-def process_save_title(payload):
-    """Processa salvamento de título manual"""
-    response_data = {"success": False}
-    
-    manual_title = payload.get('manualTitle', '')
-    if not manual_title.strip():
-        response_data['message'] = "Título é obrigatório"
-        return jsonify(response_data), 400
-    
-    # Aqui você pode salvar o título em um banco de dados
-    print(f"Título salvo: {manual_title}")
-    
-    response_data['success'] = True
-    response_data['message'] = "Título salvo com sucesso!"
-    
-    return jsonify(response_data)
-
-@app.route('/uploads/<filename>')
-def uploaded_file(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename)
-
-@app.route('/post/<slug>')
-def post_image(slug):
-    """Serve a imagem mais recente para o slug do post"""
-    try:
-        # Buscar o arquivo mais recente na pasta uploads
-        files = os.listdir(UPLOAD_FOLDER)
-        if not files:
-            return "Nenhuma imagem encontrada", 404
-        
-        # Filtrar apenas arquivos de imagem
-        image_files = [f for f in files if f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif'))]
-        if not image_files:
-            return "Nenhuma imagem encontrada", 404
-        
-        # Pegar o arquivo mais recente
-        latest_file = max(image_files, key=lambda x: os.path.getctime(os.path.join(UPLOAD_FOLDER, x)))
-        
-        print(f"DEBUG - Servindo imagem para slug '{slug}': {latest_file}")
-        return send_from_directory(UPLOAD_FOLDER, latest_file)
-    except Exception as e:
-        print(f"Erro ao servir imagem para slug '{slug}': {e}")
-        return "Erro ao carregar imagem", 500
-
-@app.route('/api/check-image/<image_id>')
-def check_image_status(image_id):
-    """Verifica o status de uma imagem no Placid"""
-    try:
-        image_data = get_placid_image(image_id)
-        if not image_data:
-            return jsonify({"success": False, "message": "Imagem não encontrada"}), 404
-        
-        status = image_data.get('status')
-        if status == 'finished' and image_data.get('image_url'):
-            return jsonify({
-                "success": True,
-                "status": "finished",
-                "imageUrl": image_data['image_url']
-            })
-        elif status == 'error':
-            return jsonify({
-                "success": False,
-                "status": "error",
-                "message": "Erro ao processar imagem"
-            })
-        else:
-            return jsonify({
-                "success": True,
-                "status": "processing",
-                "message": "Imagem ainda em processamento"
-            })
-    except Exception as e:
-        print(f"Erro ao verificar status da imagem {image_id}: {e}")
-        return jsonify({"success": False, "message": f"Erro: {e}"}), 500
-
+# Initialize app
 if __name__ == '__main__':
-    print("🚀 Iniciando SaaS Editor...")
-    print(f"🎨 Integração com Placid: {PLACID_API_URL}")
-    print(f"📋 Templates disponíveis: {len(PLACID_TEMPLATES)}")
+    ensure_upload_directory()
+    
+    logger.info("🚀 Starting SaaS Editor...")
+    logger.info(f"🎨 Placid API: {Config.PLACID_API_URL}")
+    logger.info(f"📋 Templates available: {len(PLACID_TEMPLATES)}")
+    
     for key, template in PLACID_TEMPLATES.items():
-        print(f"   - {template['name']}: {template['uuid']}")
-    print(f"🌐 Servidor rodando em: http://0.0.0.0:5000" )
+        logger.info(f"   - {template['name']}: {template['uuid']}")
+    
+    logger.info("🌐 Server running on: http://0.0.0.0:5000")
     app.run(debug=True, host='0.0.0.0', port=5000)
