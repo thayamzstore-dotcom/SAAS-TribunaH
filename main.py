@@ -57,7 +57,7 @@ PLACID_TEMPLATES = {
         'dimensions': {'width': 1080, 'height': 1920}
     },
     'feed_1': {
-        'uuid': '7vqi5vgmvwgfm',
+        'uuid': '634mwbty80jqk',
         'name': 'Feed - Modelo 1',
         'description': 'Template para Feed',
         'type': 'feed',
