@@ -18,7 +18,7 @@ CORS(app)
 
 # Configuration
 class Config:
-    PLACID_API_TOKEN = 'placid-3wvhjeuwarxmpfwq-cvjl621m7zlcjafp'
+    PLACID_API_TOKEN = 'placid-mmv6puv1gvuucitb-hhflfvh5yeru1ijl'
     PLACID_API_URL = 'https://api.placid.app/api/rest/images'
     GROQ_API_KEY = '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'
     GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
@@ -28,66 +28,73 @@ class Config:
 
 # Templates configuration
 PLACID_TEMPLATES = {
-    'watermark': {
-        'uuid': 'x9jxylt4vx2x0',
-        'name': 'Marca d\'Água',
-        'description': 'Template para aplicar marca d\'água',
-        'type': 'watermark',
-        'dimensions': {'width': 1200, 'height': 1200}
+    'stories_2': {
+        'uuid': 'plrlpyk5wwjvw',
+        'name': 'Stories - Modelo 2',
+        'description': 'Template para stories',
+        'type': 'story',
+        'dimensions': {'width': 1080, 'height': 1920}
     },
     'stories_1': {
-        'uuid': 'g7wi0hogpxx5c',
+        'uuid': 'dfgp8e0wosomx',
         'name': 'Stories - Modelo 1',
         'description': 'Template para Stories',
         'type': 'story',
         'dimensions': {'width': 1080, 'height': 1920}
     },
-    'reels_feed_2': {
-        'uuid': 'lqw8eihb6mirk',
+    'reels_modelo_2': {
+        'uuid': 'wsusffzt492wq',
         'name': 'Reels Feed - Modelo 2',
-        'description': 'Template para Reels e Feed',
+        'description': 'Template para Reels',
         'type': 'reels',
         'dimensions': {'width': 1080, 'height': 1920}
     },
-    'reels_feed_3': {
-        'uuid': 'cjnpj919alht9',
-        'name': 'Reels Feed - Modelo 3',
-        'description': 'Template para Reels e Feed',
+    'reels_modelo_1': {
+        'uuid': 'fhymmiu4gzs1l',
+        'name': 'Reels Feed - Modelo 1',
+        'description': 'Template para Reels',
         'type': 'reels',
         'dimensions': {'width': 1080, 'height': 1920}
     },
     'feed_1': {
-        'uuid': '634mwbty80jqk',
+        'uuid': 'bvxnkfasqpbl9',
         'name': 'Feed - Modelo 1',
         'description': 'Template para Feed',
         'type': 'feed',
         'dimensions': {'width': 1200, 'height': 1200}
     },
-    'feed_1_red': {
-        'uuid': 'qe0qo74vbrgxe',
-        'name': 'Feed - Modelo 1 (Red)',
-        'description': 'Template para Feed - Versão Vermelha',
+    'feed_2': {
+        'uuid': '33moedpfusmbo',
+        'name': 'Feed - Modelo 2',
+        'description': 'Template para Feed',
         'type': 'feed',
         'dimensions': {'width': 1200, 'height': 1200}
     },
-    'watermark1': {
-        'uuid': 'ueo8w3vhoxfkp',
-        'name': 'Watermark1',
+    'watermark': {
+        'uuid': 'kky75obfzathq',
+        'name': 'Watermark',
         'description': 'Template para Watermark',
         'type': 'watermark',
         'dimensions': {'width': 1200, 'height': 1200}
     },
-    'feed_2_white': {
-        'uuid': 'ye0bmj6dgoneq',
-        'name': 'Feed - Modelo 2 (White)',
-        'description': 'Template para Feed - Versão Branca',
+    'watermark_1': {
+        'uuid': 'wnmkfkbcsnsdo',
+        'name': 'Watermark1',
+        'description': 'Template para Watermark - Segundo Modelo',
+        'type': 'watermark',
+        'dimensions': {'width': 1200, 'height': 1200}
+    },
+    'feed_3': {
+        'uuid': 'efnadlehh2ato',
+        'name': 'Feed - Modelo 3',
+        'description': 'Template para Feed',
         'type': 'feed',
         'dimensions': {'width': 1200, 'height': 1200}
     },
-    'feed_3_black': {
-        'uuid': '7mfd5rkx2hmvw',
-        'name': 'Feed - Modelo 3 (Black)',
-        'description': 'Template para Feed - Versão Preta',
+    'feed_4': {
+        'uuid': 'hmnyoopxig4cm',
+        'name': 'Feed - Modelo 4',
+        'description': 'Template para Feed',
         'type': 'feed',
         'dimensions': {'width': 1200, 'height': 1200}
     }
@@ -99,29 +106,41 @@ AI_PROMPTS = {
 
 Você é um jornalista especialista em copy para redes sociais, capaz de transformar descrições de notícias em legendas curtas, chamativas e informativas para posts de Instagram do jornal Tribuna Hoje. Sempre que receber uma descrição de notícia, siga rigorosamente estas instruções:
 
-Análise Completa: Identifique os elementos centrais da notícia (quem, o quê, onde e consequência mais relevante).
+Análise Completa: Identifique os elementos centrais da notícia (quem, o quê, onde e consequência mais relevante) e INFIRA o assunto/tema principal (ex.: política, polícia, saúde, economia, clima, esporte, cultura, serviço).
 
 Impacto Inicial: Comece a legenda com uma chamada forte e clara, destacando a informação mais importante ou surpreendente da descrição.
 
-Contexto Curto: Acrescente em seguida 1 a 2 frases curtas que resumam o contexto, de forma simples e acessível.
+Contexto Curto: Acrescente 1 a 2 frases curtas que resumam o contexto de forma simples e acessível.
 
-Tom Jornalístico: Mantenha a credibilidade, clareza e objetividade, sem sensacionalismo exagerado.
+Tom Jornalístico: Mantenha credibilidade, clareza e objetividade, sem sensacionalismo exagerado.
 
-Palavras-Chave Obrigatórias: Inclua naturalmente termos que reforcem relevância jornalística, como "Alagoas", "Maceió", "Tribuna Hoje", "exclusivo", "urgente".
+Palavras-Chave Obrigatórias: Inclua naturalmente termos que reforcem relevância jornalística, como "Alagoas", "Maceió", "Tribuna Hoje", "exclusivo", "urgente" quando fizer sentido.
 
-CTA Estratégico: Finalize sempre com um convite à ação (CTA), incentivando o público a seguir o perfil, comentar ou acessar o link na bio para a matéria completa.
+CTA Estratégico (SEPARADO): Crie um CTA em linha própria, adequado ao assunto inferido. Exemplos por assunto:
+- Política/economia: "🔗 Leia a matéria completa no link da bio"
+- Polícia/segurança: "⚠️ Compartilhe a informação"
+- Saúde/serviço público: "📣 Salve e repasse para quem precisa"
+- Clima/transporte: "🌧️ Acompanhe os alertas oficiais"
+- Opinião/engajamento: "💬 O que você acha? Comente"
 
-Formatação Padronizada:
+Hashtags por Assunto (SEPARADAS): Gere 5 a 8 hashtags específicas ao tema, seguindo regras:
+- Inclua sempre #TribunaHoje e, quando fizer sentido, #Alagoas e #Maceio (sem acento)
+- Foque em termos do assunto (ex.: #Saude, #Seguranca, #Politica, #Economia, #Clima, #Cultura, #Esporte)
+- Use todas em minúsculas, sem acentos, sem espaços, separadas por espaço; não repita hashtags; evite genéricas demais (#news, #insta)
 
-Primeira letra maiúscula em todas as frases.
+Formatação Obrigatória da Saída (exatamente 3 blocos, nesta ordem, separados por 1 linha em branco, sem rótulos):
+1) Corpo da legenda (2 a 3 frases, 250–400 caracteres)
 
-Parágrafos curtos e claros (1 a 3 linhas cada).
+2) CTA em linha única
 
-Extensão Ideal: A legenda deve ter entre 250 e 400 caracteres, curta o bastante para leitura rápida, mas informativa.
+3) Hashtags em uma única linha
 
-Evite Repetições: Nunca copie literalmente a descrição original; sempre reescreva com nova estrutura e escolha de palavras.
+Padrão de Estilo:
+- Primeira letra maiúscula em todas as frases do corpo
+- Parágrafos curtos e claros (1 a 3 linhas cada)
+- Não copiar literalmente a descrição original; reescreva com nova estrutura e escolha de palavras
 
-Resposta Direta: Retorne SOMENTE a legenda pronta para a foto, sem comentários, explicações ou qualquer texto adicional.""",
+Resposta Direta: Retorne SOMENTE o texto final no formato acima, sem comentários, explicações ou qualquer texto adicional.""",
 
     'titulo': """Gerador Avançado de Títulos Jornalísticos Impactantes
 
@@ -500,11 +519,13 @@ def configure_layers_for_template(template_key: str, template_info: Dict[str, An
     template_type = template_info.get('type', 'feed')
     logger.info(f"🎨 Template type: {template_type}")
     
+    # Base media layer: usar SEMPRE imagem (mesma lógica dos outros formatos)
     layers = {
         "imgprincipal": {
             "image": public_file_url
         }
     }
+    logger.info(f"🖼️ Using image layer for template: {template_key}")
     logger.info(f"🖼️ Base layers: {layers}")
     
     # Add text layers based on template type
@@ -537,11 +558,13 @@ def configure_layers_for_template(template_key: str, template_info: Dict[str, An
     else:
         logger.info(f"⏭️ Skipping story title - Type: {template_type}, Title: {title}")
         
-    if template_type == 'reels' and title:
-        layers["titulocopy"] = {"text": title}
-        logger.info(f"✅ Added title layer for reels: {title}")
-    else:
-        logger.info(f"⏭️ Skipping reels title - Type: {template_type}, Title: {title}")
+    if template_type == 'reels':
+        logger.info("🔍 Processing reels template layers (only titulocopy + imgprincipal)")
+        if title:
+            layers["titulocopy"] = {"text": title}
+            logger.info(f"✅ Added title layer for reels: {title}")
+        else:
+            logger.info("⏭️ No title provided for reels")
     
     logger.info(f"🎉 Final layers configured: {layers}")
     return layers
@@ -1411,41 +1434,9 @@ HTML_TEMPLATE = """
                         </div>
                     </div>
 
+                    <div id="format-preview" style="margin: 10px 0 6px; color: #6c757d;"></div>
                     <h3>Templates Disponíveis</h3>
-                    <div class="template-grid" id="template-grid">
-                        <div class="template-item selected" onclick="selectTemplate('stories_1')">
-                            <div class="template-preview">📱</div>
-                            <p>Stories - Modelo 1</p>
-                        </div>
-                        <div class="template-item" onclick="selectTemplate('reels_feed_2')">
-                            <div class="template-preview">🎬</div>
-                            <p>Reels Feed - Modelo 2</p>
-                        </div>
-                        <div class="template-item" onclick="selectTemplate('reels_feed_3')">
-                            <div class="template-preview">🎥</div>
-                            <p>Reels Feed - Modelo 3</p>
-                        </div>
-                        <div class="template-item" onclick="selectTemplate('feed_1')">
-                            <div class="template-preview">🖼️</div>
-                            <p>Feed - Modelo 1</p>
-                        </div>
-                        <div class="template-item" onclick="selectTemplate('feed_1_red')">
-                            <div class="template-preview">🔴</div>
-                            <p>Feed - Modelo 1 (Red)</p>
-                        </div>
-                        <div class="template-item" onclick="selectTemplate('watermark1')">
-                            <div class="template-preview">🏷️</div>
-                            <p>WaterMark1</p>
-                        </div>
-                        <div class="template-item" onclick="selectTemplate('feed_2_white')">
-                            <div class="template-preview">⚪</div>
-                            <p>Feed - Modelo 2 (White)</p>
-                        </div>
-                        <div class="template-item" onclick="selectTemplate('feed_3_black')">
-                            <div class="template-preview">⚫</div>
-                            <p>Feed - Modelo 3 (Black)</p>
-                        </div>
-                    </div>
+                    <div class="template-grid" id="template-grid"></div>
                 </div>
 
                 <div class="two-column">
@@ -1625,6 +1616,59 @@ HTML_TEMPLATE = """
         let uploadedFiles = {};
         let generatedImageUrls = {};
 
+        // Registry of templates by format with preview icon and label
+        const TEMPLATE_REGISTRY = {
+            watermark: [
+                { key: 'watermark', label: "Marca d'Água", icon: '🏷️' },
+                { key: 'watermark1', label: 'WaterMark1', icon: '🏷️' }
+            ],
+            feed: [
+                { key: 'feed_1', label: 'Feed - Modelo 1', icon: '🖼️' },
+                { key: 'feed_2', label: 'Feed - Modelo 2', icon: '🔴' },
+                { key: 'feed_3', label: 'Feed - Modelo 3', icon: '⚪' },
+                { key: 'feed_4', label: 'Feed - Modelo 4', icon: '⚫' }
+            ],
+            stories: [
+                { key: 'stories_1', label: 'Stories - Modelo 1', icon: '📱' },
+                { key: 'stories_2', label: 'Stories - Modelo 2', icon: '📱' }
+            ],
+            reels: [
+                { key: 'reels_modelo_1', label: 'Reels Feed - Modelo 2', icon: '🎬' },
+                { key: 'reels_modelo_2', label: 'Reels Feed - Modelo 2', icon: '🎥' },
+                { key: 'reels_modelo_3', label: 'Reels Feed - Modelo 3', icon: '🎥' }
+            ]
+        };
+
+        const FORMAT_PREVIEW = {
+            watermark: "Prévia: aplica apenas a marca d'água sobre a imagem enviada.",
+            feed: 'Prévia: post quadrado 1200x1200 com título, assunto e créditos.',
+            stories: 'Prévia: vertical 1080x1920 para Stories, otimizado para texto curto.',
+            reels: 'Prévia: vertical 1080x1920 para Reels/Feed, foco em vídeo/título.'
+        };
+
+        function renderTemplatesForFormat(format) {
+            const grid = document.getElementById('template-grid');
+            if (!grid) return;
+            grid.innerHTML = '';
+            const list = TEMPLATE_REGISTRY[format] || [];
+            list.forEach((tpl, index) => {
+                const div = document.createElement('div');
+                div.className = 'template-item' + (index === 0 ? ' selected' : '');
+                div.setAttribute('onclick', `selectTemplate('${tpl.key}')`);
+                div.innerHTML = `
+                    <div class="template-preview">${tpl.icon}</div>
+                    <p>${tpl.label}</p>
+                `;
+                grid.appendChild(div);
+                if (index === 0) {
+                    selectedTemplate = tpl.key;
+                }
+            });
+            const preview = document.getElementById('format-preview');
+            if (preview) preview.textContent = FORMAT_PREVIEW[format] || '';
+            updateFieldsForTemplate(selectedTemplate);
+        }
+
         // Tab switching
         function switchTab(tabName) {
             document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
@@ -1685,6 +1729,8 @@ HTML_TEMPLATE = """
                     }
                 });
             });
+            // Initial render of templates for default format
+            renderTemplatesForFormat(selectedFormat);
         });
 
         // Format selection
@@ -1704,16 +1750,8 @@ HTML_TEMPLATE = """
                 creditosGroup.style.display = 'none';
             }
             
-            // Auto-select appropriate template based on format
-            if (format === 'watermark') {
-                selectTemplate('watermark');
-            } else if (format === 'feed') {
-                selectTemplate('feed_1_red');
-            } else if (format === 'stories') {
-                selectTemplate('stories_1');
-            } else if (format === 'reels') {
-                selectTemplate('reels_feed_2');
-            }
+            // Render only templates available for the chosen format
+            renderTemplatesForFormat(format);
         }
 
         // Template selection
