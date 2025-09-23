@@ -1,28 +1,7 @@
-# Flask framework e extensões
 Flask==3.0.0
 Flask-CORS==4.0.0
-
-# HTTP requests
 requests==2.31.0
-
-# Image processing
 Pillow==10.1.0
-
-# Video processing (opcional - para funcionalidade de reels)
 moviepy==1.0.3
 imageio==2.33.1
 imageio-ffmpeg==0.4.9
-
-# Dependências do sistema de logging (já incluído no Python)
-# logging - built-in
-
-# Dependências para manipulação de arquivos e sistema
-# os - built-in
-# time - built-in
-# datetime - built-in
-# json - built-in
-# re - built-in
-# typing - built-in
-
-# Para produção (opcional)
-gunicorn==21.2.0
