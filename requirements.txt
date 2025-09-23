@@ -1,8 +1,6 @@
-Flask==2.3.3
+Flask==3.0.0
 Flask-CORS==4.0.0
 moviepy==1.0.3
-imageio==2.31.6
-imageio-ffmpeg==0.4.8
-numpy==1.24.4
-requests==2.31.0
-Pillow==10.4.0
+imageio==2.35.1
+imageio-ffmpeg==0.5.1
+numpy==1.26.4
