@@ -2801,4 +2801,4 @@ if __name__ == '__main__':
         logger.info(f"   - {template['name']}: {template['uuid']}")
     
     logger.info("🌐 Server running on: http://0.0.0.0:5000")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=False, host='0.0.0.0', port=5000)
