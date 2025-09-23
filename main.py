@@ -8,6 +8,7 @@ import time
 from datetime import datetime
 from typing import Dict, Any, Optional, Tuple
 import logging
+from PIL import Image, ImageDraw, ImageFont
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -26,6 +27,19 @@ class Config:
     MAX_FILE_SIZE = 16 * 1024 * 1024  # 16MB
     ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'mp4', 'mov'}
 
+try:
+    # MoviePy is optional; used for extracting frames from videos for reels
+    import moviepy.editor as mpe
+    logger.info("MoviePy importado com sucesso!")
+except ImportError as e:
+    logger.error(f"MoviePy não encontrado: {e}")
+    mpe = None
+except Exception as e:
+    logger.error(f"Erro ao importar MoviePy: {type(e).__name__}: {e}")
+    import traceback
+    logger.error(f"Traceback: {traceback.format_exc()}")
+    mpe = None
+
 # Templates configuration
 PLACID_TEMPLATES = {
     'stories_2': {
@@ -40,20 +54,6 @@ PLACID_TEMPLATES = {
         'name': 'Stories - Modelo 1',
         'description': 'Template para Stories',
         'type': 'story',
-        'dimensions': {'width': 1080, 'height': 1920}
-    },
-    'reels_modelo_2': {
-        'uuid': 'wsusffzt492wq',
-        'name': 'Reels Feed - Modelo 2',
-        'description': 'Template para Reels',
-        'type': 'reels',
-        'dimensions': {'width': 1080, 'height': 1920}
-    },
-    'reels_modelo_1': {
-        'uuid': 'fhymmiu4gzs1l',
-        'name': 'Reels Feed - Modelo 1',
-        'description': 'Template para Reels',
-        'type': 'reels',
         'dimensions': {'width': 1080, 'height': 1920}
     },
     'feed_1': {
@@ -97,6 +97,63 @@ PLACID_TEMPLATES = {
         'description': 'Template para Feed',
         'type': 'feed',
         'dimensions': {'width': 1200, 'height': 1200}
+    }
+}
+
+# SUBSTITUA esta parte no seu main.py (linha ~100-150):
+
+LOCAL_REELS_TEMPLATES = {
+    'reels_modelo_1': {
+        'name': 'Reels - Modelo 1',
+        'description': 'Template Tribuna Hoje com título superior',
+        'type': 'reels',
+        'dimensions': {'width': 1080, 'height': 1920},
+        'style': {
+            'title_position': 'top',
+            'title_background': True,
+            'title_color': (255, 255, 255),        # branco
+            'background_color': (139, 0, 0),        # vermelho Tribuna Hoje
+            'background_pattern': 'subtle_waves',   # ondinhas fraquinhas
+            'title_font_size': 48,
+            'title_padding': 80,
+            'brand_text': 'TRIBUNAHOJE.com',
+            'brand_font_size': 32,
+            'brand_position': 'top_center',
+            'footer_text': 'Somos Coop',
+            'footer_font_size': 24,
+            'footer_position': 'bottom_center',
+            'video_area': {
+                'top': 400,      # vídeo no meio
+                'bottom': 1300,   
+                'overlay_pattern': 'diagonal_lines'  # área cinza listrada para vídeo
+            }
+        }
+    },
+    'reels_modelo_2': {
+        'name': 'Reels - Modelo 2',
+        'description': 'Template Tribuna Hoje com título inferior',
+        'type': 'reels',
+        'dimensions': {'width': 1080, 'height': 1920},
+        'style': {
+            'title_position': 'bottom',
+            'title_background': True,
+            'title_color': (255, 255, 255),        # branco
+            'background_color': (139, 0, 0),        # vermelho Tribuna Hoje
+            'background_pattern': 'subtle_waves',   # ondinhas fraquinhas
+            'title_font_size': 48,
+            'title_padding': 80,
+            'brand_text': 'TRIBUNAHOJE.com',
+            'brand_font_size': 32,
+            'brand_position': 'top_center',
+            'footer_text': 'Somos Coop',
+            'footer_font_size': 24,
+            'footer_position': 'bottom_center',
+            'video_area': {
+                'top': 400,      # vídeo no meio
+                'bottom': 1300,   
+                'overlay_pattern': 'diagonal_lines'  # área cinza listrada para vídeo
+            }
+        }
     }
 }
 
@@ -251,6 +308,525 @@ def generate_filename(prefix: str, extension: str) -> str:
     """Generate unique filename with timestamp"""
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     return f"{prefix}_{timestamp}.{extension}"
+
+def is_video_extension(ext: str) -> bool:
+    return ext.lower() in {"mp4", "mov", "mkv", "webm", "avi"}
+
+def extract_image_from_video(video_path: str, prefix: str = "frame") -> Optional[str]:
+    """Extract a representative frame from a video and save as PNG. Returns image filepath or None."""
+    try:
+        if mpe is None:
+            logger.error("MoviePy não está disponível - verifique instalação")
+            return None
+        clip = mpe.VideoFileClip(video_path)
+        duration = max(clip.duration or 0, 0)
+        # Choose frame at 1s or middle if shorter
+        t = 1.0 if duration >= 2.0 else max(duration / 2.0, 0.0)
+        frame = clip.get_frame(t)
+        image = Image.fromarray(frame)
+        filename = generate_filename(prefix, "png")
+        out_path = os.path.join(Config.UPLOAD_FOLDER, filename)
+        ensure_upload_directory()
+        image.save(out_path, format="PNG")
+        try:
+            clip.close()
+        except Exception:
+            pass
+        return out_path
+    except Exception as e:
+        logger.error(f"Failed to extract frame from video: {type(e).__name__}: {e}")
+        return None
+
+def generate_local_reels_image(source_media_path: str, title_text: str, template_key: str) -> Optional[Tuple[str, str]]:
+    """
+    Create a vertical 1080x1920 PNG for reels using the provided media (image or video frame) and title.
+    Returns (filepath, public_url) or None.
+    """
+    try:
+        # If source is video, extract frame
+        ext = os.path.splitext(source_media_path)[1].lower().lstrip('.')
+        if is_video_extension(ext):
+            frame_path = extract_image_from_video(source_media_path, prefix="reels_frame")
+            if not frame_path:
+                return None
+            base_image_path = frame_path
+        else:
+            base_image_path = source_media_path
+
+        # Canvas setup
+        width, height = 1080, 1920
+        canvas = Image.new("RGB", (width, height), color=(0, 0, 0))
+
+        # Load source image
+        with Image.open(base_image_path) as src:
+            src = src.convert("RGB")
+            # Fit source to canvas while maintaining aspect ratio
+            src_ratio = src.width / src.height
+            canvas_ratio = width / height
+            if src_ratio > canvas_ratio:
+                # source is wider -> fit width
+                new_width = width
+                new_height = int(new_width / src_ratio)
+            else:
+                # source is taller -> fit height
+                new_height = height
+                new_width = int(new_height * src_ratio)
+            resized = src.resize((new_width, new_height), Image.LANCZOS)
+            # Paste centered
+            x = (width - new_width) // 2
+            y = (height - new_height) // 2
+            canvas.paste(resized, (x, y))
+
+        # Draw title overlay (simple, top area with semi-transparent band)
+        draw = ImageDraw.Draw(canvas, 'RGBA')
+        band_height = 180
+        overlay_color = (0, 0, 0, 140)
+        draw.rectangle([(0, 0), (width, band_height)], fill=overlay_color)
+
+        # Load font (fallback to default if no TTF available)
+        font = None
+        try:
+            # Try a common font if available on system
+            font = ImageFont.truetype("arial.ttf", 64)
+        except Exception:
+            try:
+                font = ImageFont.truetype("DejaVuSans-Bold.ttf", 64)
+            except Exception:
+                font = ImageFont.load_default()
+
+        # Title text wrap simple: truncate if too long
+        text = title_text or ""
+        max_width_px = width - 120
+        if hasattr(draw, 'textlength'):
+            while text and draw.textlength(text, font=font) > max_width_px:
+                text = text[:-1]
+        else:
+            # Fallback approximate using bbox
+            while text:
+                bbox = draw.textbbox((0, 0), text, font=font)
+                if bbox[2] - bbox[0] <= max_width_px:
+                    break
+                text = text[:-1]
+
+        # Centered title
+        bbox = draw.textbbox((0, 0), text, font=font)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+        text_x = (width - text_w) // 2
+        text_y = (band_height - text_h) // 2
+        # Outline for readability
+        for dx, dy in [(-2,0),(2,0),(0,-2),(0,2)]:
+            draw.text((text_x+dx, text_y+dy), text, font=font, fill=(255,255,255,60))
+        draw.text((text_x, text_y), text, font=font, fill=(255,255,255,230))
+
+        # Save result
+        out_filename = generate_filename(template_key, "png")
+        out_path = os.path.join(Config.UPLOAD_FOLDER, out_filename)
+        ensure_upload_directory()
+        canvas.save(out_path, format="PNG")
+        public_url = f"{request.url_root}uploads/{out_filename}"
+        return out_path, public_url
+    except Exception as e:
+        logger.error(f"Failed to generate local reels image: {type(e).__name__}: {e}")
+        return None
+
+def _build_title_overlay_image(width: int, band_height: int, title_text: str) -> Image.Image:
+    canvas = Image.new("RGBA", (width, band_height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(canvas, 'RGBA')
+    draw.rectangle([(0, 0), (width, band_height)], fill=(0, 0, 0, 140))
+    # Font
+    try:
+        font = ImageFont.truetype("arial.ttf", 64)
+    except Exception:
+        try:
+            font = ImageFont.truetype("DejaVuSans-Bold.ttf", 64)
+        except Exception:
+            font = ImageFont.load_default()
+    text = title_text or ""
+    max_width_px = width - 120
+    if hasattr(draw, 'textlength'):
+        while text and draw.textlength(text, font=font) > max_width_px:
+            text = text[:-1]
+    else:
+        while text:
+            bbox = draw.textbbox((0, 0), text, font=font)
+            if bbox[2] - bbox[0] <= max_width_px:
+                break
+            text = text[:-1]
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_w = bbox[2] - bbox[0]
+    text_h = bbox[3] - bbox[1]
+    text_x = (width - text_w) // 2
+    text_y = (band_height - text_h) // 2
+    for dx, dy in [(-2,0),(2,0),(0,-2),(0,2)]:
+        draw.text((text_x+dx, text_y+dy), text, font=font, fill=(255,255,255,60))
+    draw.text((text_x, text_y), text, font=font, fill=(255,255,255,230))
+    return canvas
+
+def _create_title_overlay_for_template(width: int, height: int, title_text: str, style: dict) -> Optional[Image.Image]:
+    """
+    Cria um overlay de título baseado no estilo do template Tribuna Hoje.
+    """
+    if not title_text:
+        return None
+    
+    try:
+        # Carrega fonte
+        font_size = style.get('title_font_size', 48)
+        brand_font_size = style.get('brand_font_size', 32)
+        
+        try:
+            font = ImageFont.truetype("arial.ttf", font_size)
+            brand_font = ImageFont.truetype("arial.ttf", brand_font_size)
+        except Exception:
+            try:
+                font = ImageFont.truetype("DejaVuSans-Bold.ttf", font_size)
+                brand_font = ImageFont.truetype("DejaVuSans-Bold.ttf", brand_font_size)
+            except Exception:
+                font = ImageFont.load_default()
+                brand_font = ImageFont.load_default()
+        
+        # Calcula dimensões
+        text = title_text.strip().upper()  # Tribuna Hoje usa maiúsculas
+        if not text:
+            return None
+        
+        # Quebra texto em múltiplas linhas se necessário
+        max_width = width - (style.get('title_padding', 80) * 2)
+        lines = _wrap_text(text, font, max_width)
+        
+        # Calcula altura da área do título
+        line_height = font_size + 15
+        text_height = len(lines) * line_height
+        brand_height = brand_font_size + 10
+        total_content_height = text_height + brand_height + 30  # espaço entre elementos
+        
+        # Área total da faixa (com padding)
+        band_height = total_content_height + (style.get('title_padding', 80) * 2)
+        
+        # Cria canvas para o overlay
+        overlay = Image.new("RGBA", (width, band_height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay, 'RGBA')
+        
+        # Fundo vermelho da faixa
+        bg_color = style.get('background_color', (139, 0, 0))
+        bg_rgba = (*bg_color, 255)  # vermelho sólido
+        draw.rectangle([(0, 0), (width, band_height)], fill=bg_rgba)
+        
+        # Posição inicial do texto
+        text_color = style.get('title_color', (255, 255, 255))
+        y_offset = style.get('title_padding', 80)
+        
+        # Desenha o título
+        for line in lines:
+            bbox = draw.textbbox((0, 0), line, font=font)
+            text_w = bbox[2] - bbox[0]
+            text_x = (width - text_w) // 2  # centralizado
+            
+            # Texto principal em branco
+            draw.text((text_x, y_offset), line, font=font, fill=text_color)
+            y_offset += line_height
+        
+        # Adiciona espaço entre título e marca
+        y_offset += 20
+        
+        # Desenha a marca "TRIBUNAHOJE.com"
+        brand_text = style.get('brand_text', 'TRIBUNAHOJE.com')
+        bbox = draw.textbbox((0, 0), brand_text, font=brand_font)
+        brand_w = bbox[2] - bbox[0]
+        brand_x = (width - brand_w) // 2
+        draw.text((brand_x, y_offset), brand_text, font=brand_font, fill=text_color)
+        
+        return overlay
+        
+    except Exception as e:
+        logger.error(f"Erro ao criar overlay Tribuna Hoje: {e}")
+        return None
+
+def _wrap_text(text: str, font: ImageFont.ImageFont, max_width: int) -> list:
+    """
+    Quebra texto em múltiplas linhas para caber na largura especificada.
+    """
+    words = text.split()
+    lines = []
+    current_line = []
+    
+    for word in words:
+        test_line = ' '.join(current_line + [word])
+        bbox = font.getbbox(test_line) if hasattr(font, 'getbbox') else font.getsize(test_line)
+        text_width = bbox[2] - bbox[0] if hasattr(font, 'getbbox') else bbox[0]
+        
+        if text_width <= max_width:
+            current_line.append(word)
+        else:
+            if current_line:
+                lines.append(' '.join(current_line))
+                current_line = [word]
+            else:
+                # Palavra muito longa, adiciona mesmo assim
+                lines.append(word)
+    
+    if current_line:
+        lines.append(' '.join(current_line))
+    
+    return lines
+
+def generate_local_reels_video(source_media_path: str, title_text: str, template_key: str) -> Optional[Tuple[str, str]]:
+    """
+    Gera um vídeo de reels usando template de fundo "template1".
+    Compõe: fundo fixo + vídeo centralizado + título superior.
+    Returns (filepath, public_url) or None.
+    """
+    if mpe is None:
+        logger.error("MoviePy não está disponível - verifique instalação")
+        logger.error("Tente: pip install moviepy imageio imageio-ffmpeg")
+        return None
+    
+    # Teste de componentes MoviePy
+    logger.info("Testando importações do MoviePy...")
+    try:
+        from moviepy.editor import VideoFileClip, ImageClip, ColorClip, CompositeVideoClip, TextClip
+        logger.info("Importações básicas OK")
+    except Exception as e:
+        logger.error(f"Falha nas importações: {e}")
+        return None
+    
+    # Verifica se o template existe
+    if template_key not in LOCAL_REELS_TEMPLATES:
+        logger.error(f"Template de reels não encontrado: {template_key}")
+        return None
+    
+    template = LOCAL_REELS_TEMPLATES[template_key]
+    
+    try:
+        width, height = template['dimensions']['width'], template['dimensions']['height']
+        logger.info(f"Gerando reels com template: {template['name']}")
+        
+        # Carrega o vídeo ou converte imagem para vídeo
+        clip = None
+        logger.info(f"Verificando arquivo: {os.path.exists(source_media_path)}")
+        logger.info(f"Tamanho do arquivo: {os.path.getsize(source_media_path)} bytes")
+        try:
+            clip = mpe.VideoFileClip(source_media_path)
+            logger.info(f"Vídeo carregado: {clip.w}x{clip.h}, duração: {clip.duration}s")
+        except Exception as e:
+            logger.error(f"Erro específico ao carregar vídeo: {type(e).__name__}: {e}")
+            # Se não for vídeo, criar um vídeo curto a partir de imagem
+            logger.info("Convertendo imagem para vídeo")
+            try:
+                with Image.open(source_media_path) as img:
+                    img = img.convert('RGB')
+                    temp_img = generate_filename("reels_from_image", "png")
+                    temp_path = os.path.join(Config.UPLOAD_FOLDER, temp_img)
+                    ensure_upload_directory()
+                    img.save(temp_path, format='PNG')
+                image_clip = mpe.ImageClip(temp_path).set_duration(5)
+                clip = image_clip.set_fps(30)
+                logger.info("Imagem convertida para vídeo com sucesso")
+            except Exception as e2:
+                logger.error(f"Falha ao abrir mídia: {type(e2).__name__}: {e2}")
+                return None
+
+        # Carrega a imagem de fundo baseada no template selecionado (pasta raiz do projeto)
+        if template_key == 'reels_modelo_2':
+            template_bg_path = os.path.join(os.path.dirname(__file__), "template2.jpg")
+        else:
+            template_bg_path = os.path.join(os.path.dirname(__file__), "template1.jpg")  # Default para modelo 1
+            
+        if not os.path.exists(template_bg_path):
+            logger.error(f"Imagem de template não encontrada: {template_bg_path}")
+            logger.error(f"Template key: {template_key}")
+            return None
+        
+        logger.info(f"Usando template de fundo: {template_bg_path}")
+        
+        # Cria o fundo usando a imagem template1 esticando para ocupar toda a tela
+        bg = mpe.ImageClip(template_bg_path).set_duration(clip.duration).resize((width, height))
+        
+        logger.info(f"Fundo esticado para ocupar toda a tela: {width}x{height}")
+        
+        # Redimensiona o vídeo para caber na área central com mais margem vertical
+        # Área disponível para vídeo: deixa mais espaço em cima e embaixo
+        video_area_top = 400  # Mais espaço para título e elementos superiores
+        video_area_bottom = 1520  # Mais espaço na parte inferior
+        video_area_height = video_area_bottom - video_area_top
+        video_area_width = width - 120  # Margem lateral
+        
+        # Calcula redimensionamento usando as dimensões específicas solicitadas (ligeiramente maiores)
+        # Dimensões ajustadas: um pouco maior em largura e altura
+        video_horizontal_width = 1080  # Mantém largura total
+        video_horizontal_height = 650  # Aumenta altura de 609 para 650 (+41px)
+        
+        # Verifica se cabe na área disponível, se não couber, reduz proporcionalmente
+        if video_horizontal_width > video_area_width:
+            # Reduz proporcionalmente se for maior que a área disponível
+            scale_factor = video_area_width / video_horizontal_width
+            video_horizontal_width = video_area_width
+            video_horizontal_height = int(video_horizontal_height * scale_factor)
+        
+        if video_horizontal_height > video_area_height:
+            # Reduz proporcionalmente se for maior que a altura disponível
+            scale_factor = video_area_height / video_horizontal_height
+            video_horizontal_height = video_area_height
+            video_horizontal_width = int(video_horizontal_width * scale_factor)
+        
+        # Redimensiona o vídeo para as dimensões especificadas
+        resized_clip = clip.resize(newsize=(video_horizontal_width, video_horizontal_height))
+        
+        # Centraliza o vídeo horizontalmente na área disponível
+        video_x = (width - video_horizontal_width) // 2
+        video_y = video_area_top + (video_area_height - video_horizontal_height) // 2
+        positioned_video = resized_clip.set_position((video_x, video_y))
+        
+        logger.info(f"Vídeo redimensionado para dimensões específicas: {video_horizontal_width}x{video_horizontal_height} na posição ({video_x}, {video_y})")
+
+        # Cria o título usando PIL em vez de MoviePy TextClip (mais simples e não precisa ImageMagick)
+        title_clip = None
+        if title_text:
+            try:
+                # Cria uma imagem de título usando PIL
+                title_img = Image.new('RGBA', (width, 200), (0, 0, 0, 0))  # Transparente
+                draw = ImageDraw.Draw(title_img)
+                
+                # Carrega fonte mais cheia (bold/negrito)
+                try:
+                    font = ImageFont.truetype("arialbd.ttf", 60)  # Arial Bold maior
+                except Exception:
+                    try:
+                        font = ImageFont.truetype("calibrib.ttf", 60)  # Calibri Bold
+                    except Exception:
+                        try:
+                            font = ImageFont.truetype("arial.ttf", 60)  # Arial normal como fallback
+                        except Exception:
+                            font = ImageFont.load_default()
+                
+                # Quebra o texto se for muito longo e garante CAIXA ALTA
+                text = title_text.upper().strip()  # Força texto em MAIÚSCULAS
+                max_width = width - 100  # Margem de 50px de cada lado
+                
+                # Função simples para quebrar texto
+                words = text.split()
+                lines = []
+                current_line = []
+                
+                for word in words:
+                    test_line = ' '.join(current_line + [word])
+                    bbox = draw.textbbox((0, 0), test_line, font=font)
+                    text_width = bbox[2] - bbox[0]
+                    
+                    if text_width <= max_width:
+                        current_line.append(word)
+                    else:
+                        if current_line:
+                            lines.append(' '.join(current_line))
+                            current_line = [word]
+                        else:
+                            lines.append(word)  # Palavra muito longa
+                
+                if current_line:
+                    lines.append(' '.join(current_line))
+                
+                # Desenha o texto linha por linha
+                line_height = 70
+                total_height = len(lines) * line_height
+                start_y = (200 - total_height) // 2
+                
+                for i, line in enumerate(lines):
+                    bbox = draw.textbbox((0, 0), line, font=font)
+                    text_width = bbox[2] - bbox[0]
+                    x = (width - text_width) // 2  # Centralizado
+                    y = start_y + i * line_height
+                    
+                    # Desenha contorno preto
+                    for dx, dy in [(-2,0), (2,0), (0,-2), (0,2), (-1,-1), (1,-1), (-1,1), (1,1)]:
+                        draw.text((x+dx, y+dy), line, font=font, fill=(0, 0, 0, 255))
+                    
+                    # Desenha texto branco
+                    draw.text((x, y), line, font=font, fill=(255, 255, 255, 255))
+                
+                # Salva a imagem do título
+                title_filename = generate_filename("title_overlay", "png")
+                title_path = os.path.join(Config.UPLOAD_FOLDER, title_filename)
+                ensure_upload_directory()
+                title_img.save(title_path, format='PNG')
+                
+                # Cria o clip do título posicionado mais embaixo ainda
+                title_y_position = video_area_top + 60  # 60px dentro da área do vídeo (mais embaixo)
+                title_clip = mpe.ImageClip(title_path).set_duration(clip.duration).set_position((0, title_y_position))
+                
+                logger.info("Título criado com PIL e sobreposto como ImageClip")
+                
+            except Exception as e:
+                logger.error(f"Falha ao criar título com PIL: {e}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+
+        # Composição final: fundo + vídeo + título
+        clips_to_compose = [bg, positioned_video]
+        if title_clip:
+            clips_to_compose.append(title_clip)
+        
+        composed = mpe.CompositeVideoClip(clips_to_compose)
+
+        # Preserva áudio original se existir
+        try:
+            if hasattr(clip, 'audio') and clip.audio is not None:
+                composed = composed.set_audio(clip.audio)
+                logger.info("Áudio original preservado")
+        except Exception as e:
+            logger.warning(f"Não foi possível preservar áudio: {e}")
+
+        # Exporta o vídeo
+        out_filename = generate_filename(template_key, "mp4")
+        out_path = os.path.join(Config.UPLOAD_FOLDER, out_filename)
+        
+        fps = None
+        try:
+            fps = int(getattr(clip, 'fps', 30) or 30)
+        except Exception:
+            fps = 30
+
+        logger.info(f"Exportando vídeo para: {out_path}")
+        try:
+            composed.write_videofile(
+                out_path,
+                fps=min(max(fps, 24), 60),
+                codec='libx264',
+                audio_codec='aac',
+                threads=2,
+                preset='medium',
+                verbose=False,
+                logger=None
+            )
+            logger.info("Exportação concluída!")
+        except Exception as e:
+            logger.error(f"Erro na exportação: {type(e).__name__}: {e}")
+            import traceback
+            logger.error(f"Traceback exportação: {traceback.format_exc()}")
+            return None
+
+        # Cleanup
+        try:
+            if clip is not None:
+                clip.close()
+            if 'resized_clip' in locals():
+                resized_clip.close()
+            if 'composed' in locals():
+                composed.close()
+            if title_clip is not None:
+                title_clip.close()
+        except Exception:
+            pass
+
+        public_url = f"{request.url_root}uploads/{out_filename}"
+        logger.info(f"Reels gerado com sucesso: {public_url}")
+        return out_path, public_url
+        
+    except Exception as e:
+        logger.error(f"Falha ao gerar vídeo local de reels: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return None
 
 def call_groq_api(prompt: str, content: str, max_tokens: int = 1000) -> Optional[str]:
     """Call Groq API with error handling and retries"""
@@ -765,9 +1341,30 @@ def handle_generate_post(payload: Dict[str, Any], request) -> jsonify:
     logger.info(f"📝 Subject: {subject}")
     logger.info(f"📝 Credits: {credits}")
     
+    # Check if it's a local reels template first
+    if template_key in LOCAL_REELS_TEMPLATES:
+        logger.info("🎬 Using local reels video compositor (no Placid)")
+        # Upload file first
+        logger.info("💾 Starting file upload process for reels")
+        success, filepath, public_url = save_uploaded_file(file, "post")
+        logger.info(f"💾 Upload result - Success: {success}, Filepath: {filepath}, URL: {public_url}")
+        
+        if not success:
+            logger.error(f"❌ File upload failed: {public_url}")
+            return jsonify(error_response(public_url))
+        
+        generated = generate_local_reels_video(filepath, title, template_key)
+        if not generated:
+            return jsonify(error_response("Falha ao gerar reels localmente"))
+        _, public_out_url = generated
+        return jsonify(success_response(
+            "Reels gerado com sucesso!",
+            videoUrl=public_out_url
+        ))
+    
     if template_key not in PLACID_TEMPLATES:
         logger.warning(f"⚠️ Template {template_key} not found, using fallback")
-        template_key = 'feed_1_red'  # Fallback
+        template_key = 'feed_1'  # Fallback
     
     template_info = PLACID_TEMPLATES[template_key]
     logger.info(f"🎨 Template info: {template_info}")
@@ -788,6 +1385,7 @@ def handle_generate_post(payload: Dict[str, Any], request) -> jsonify:
         logger.error(f"❌ File upload failed: {public_url}")
         return jsonify(error_response(public_url))
     
+
     logger.info("🔧 Configuring layers for template")
     layers = configure_layers_for_template(
         template_key, template_info, public_url,
@@ -1474,6 +2072,7 @@ HTML_TEMPLATE = """
                         </div>
                         <button class="btn btn-success" onclick="downloadFile('post')" style="display: none;" id="download-post-btn">📥 Download Post</button>
                         <a href="#" id="open-post-image" class="btn btn-secondary" style="margin-left: 10px; display: none;" target="_blank">🖼️ Abrir Imagem</a>
+                        <a href="#" id="open-post-video" class="btn btn-secondary" style="margin-left: 10px; display: none;" target="_blank">🎬 Abrir Vídeo</a>
                     </div>
                 </div>
             </div>
@@ -1612,7 +2211,7 @@ HTML_TEMPLATE = """
         // Global state
         let currentTab = 'gerar-posts';
         let selectedFormat = 'reels';
-        let selectedTemplate = 'stories_1';
+        let selectedTemplate = 'reels_modelo_1';
         let uploadedFiles = {};
         let generatedImageUrls = {};
 
@@ -1633,9 +2232,9 @@ HTML_TEMPLATE = """
                 { key: 'stories_2', label: 'Stories - Modelo 2', icon: '📱' }
             ],
             reels: [
-                { key: 'reels_modelo_1', label: 'Reels Feed - Modelo 2', icon: '🎬' },
-                { key: 'reels_modelo_2', label: 'Reels Feed - Modelo 2', icon: '🎥' },
-                { key: 'reels_modelo_3', label: 'Reels Feed - Modelo 3', icon: '🎥' }
+                { key: 'reels_modelo_1', label: 'Reels - Modelo 1', icon: '🎬', description: 'Template clássico com faixa superior' },
+                { key: 'reels_modelo_2', label: 'Reels - Modelo 2', icon: '🎥', description: 'Template com overlay central' },
+                { key: 'reels_modelo_3', label: 'Reels - Modelo 3', icon: '🎞️', description: 'Template minimalista' }
             ]
         };
 
@@ -1643,7 +2242,7 @@ HTML_TEMPLATE = """
             watermark: "Prévia: aplica apenas a marca d'água sobre a imagem enviada.",
             feed: 'Prévia: post quadrado 1200x1200 com título, assunto e créditos.',
             stories: 'Prévia: vertical 1080x1920 para Stories, otimizado para texto curto.',
-            reels: 'Prévia: vertical 1080x1920 para Reels/Feed, foco em vídeo/título.'
+            reels: 'Prévia: vertical 1080x1920 para Reels, templates locais com vídeo + título.'
         };
 
         function renderTemplatesForFormat(format) {
@@ -1657,7 +2256,8 @@ HTML_TEMPLATE = """
                 div.setAttribute('onclick', `selectTemplate('${tpl.key}')`);
                 div.innerHTML = `
                     <div class="template-preview">${tpl.icon}</div>
-                    <p>${tpl.label}</p>
+                    <p><strong>${tpl.label}</strong></p>
+                    ${tpl.description ? `<small style="color: #6c757d; font-size: 0.8rem;">${tpl.description}</small>` : ''}
                 `;
                 grid.appendChild(div);
                 if (index === 0) {
@@ -1778,6 +2378,9 @@ HTML_TEMPLATE = """
             if (templateKey.includes('feed')) {
                 assuntoGroup.style.display = 'block';
                 creditosGroup.style.display = 'block';
+            } else if (templateKey.includes('reels')) {
+                assuntoGroup.style.display = 'none';
+                creditosGroup.style.display = 'none';
             } else {
                 assuntoGroup.style.display = 'none';
                 creditosGroup.style.display = 'none';
@@ -1862,7 +2465,12 @@ HTML_TEMPLATE = """
                 return;
             }
             
-            if (!selectedTemplate.includes('feed') && !selectedTemplate.includes('watermark') && !titulo) {
+            if (selectedTemplate.includes('reels') && !titulo) {
+                showError('Para templates de Reels, o título é obrigatório.', 'post');
+                return;
+            }
+            
+            if (!selectedTemplate.includes('feed') && !selectedTemplate.includes('watermark') && !selectedTemplate.includes('reels') && !titulo) {
                 showError('O título é obrigatório.', 'post');
                 return;
             }
@@ -1879,15 +2487,28 @@ HTML_TEMPLATE = """
             hideLoading('post');
             
             if (apiResult.success) {
-                if (apiResult.imageUrl) {
+                if (apiResult.videoUrl) {
+                    generatedImageUrls.post = apiResult.videoUrl;
+                    const preview = document.getElementById('post-preview');
+                    preview.innerHTML = `<video controls style="max-width: 100%; max-height: 300px; border-radius: 10px;"><source src="${apiResult.videoUrl}" type="video/mp4"></video>`;
+                    showSuccess('Reels gerado com sucesso!', 'post');
+                    
+                    // Mostra botões para vídeo
+                    document.getElementById('download-post-btn').style.display = 'inline-block';
+                    document.getElementById('open-post-video').href = apiResult.videoUrl;
+                    document.getElementById('open-post-video').style.display = 'inline-block';
+                    document.getElementById('open-post-image').style.display = 'none';
+                } else if (apiResult.imageUrl) {
                     generatedImageUrls.post = apiResult.imageUrl;
                     const preview = document.getElementById('post-preview');
                     preview.innerHTML = `<img src="${apiResult.imageUrl}" style="max-width: 100%; max-height: 300px; border-radius: 10px; object-fit: contain;">`;
                     showSuccess('Post gerado com sucesso!', 'post');
                     
+                    // Mostra botões para imagem
                     document.getElementById('download-post-btn').style.display = 'inline-block';
                     document.getElementById('open-post-image').href = apiResult.imageUrl;
                     document.getElementById('open-post-image').style.display = 'inline-block';
+                    document.getElementById('open-post-video').style.display = 'none';
                 } else if (apiResult.imageId) {
                     showSuccess('Post em processamento. Aguarde...', 'post');
                     checkImageStatus(apiResult.imageId, 'post');
@@ -2112,7 +2733,14 @@ HTML_TEMPLATE = """
                 a.click();
                 document.body.removeChild(a);
             } else {
-                window.open(url, '_blank');
+                // Para URLs externas, cria um link de download
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${type}_${new Date().getTime()}.${url.includes('video') ? 'mp4' : 'png'}`;
+                a.target = '_blank';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
             }
             showSuccess('Download iniciado!', type);
         }
