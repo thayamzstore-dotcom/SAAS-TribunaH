@@ -1,7 +1,19 @@
+# Build dependencies - devem vir primeiro
+setuptools>=68.0.0
+wheel>=0.40.0
+Cython>=0.29.0
+
+# Core dependencies
 Flask==2.3.3
 Flask-CORS==4.0.0
-moviepy==2.0.0.dev2
+
+# Video processing - versões compatíveis
+moviepy==1.0.3
 imageio==2.31.6
 imageio-ffmpeg==0.4.8
-numpy==1.24.4
-Pillow>=10.0.0
+
+# Numerical computing - versão compatível com Python 3.13
+numpy==1.26.4
+
+# Image processing - versão que funciona com moviepy 1.0.3
+Pillow==9.5.0
