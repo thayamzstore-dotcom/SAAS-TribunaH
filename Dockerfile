@@ -4,10 +4,13 @@ WORKDIR /app
 
 ENV PYTHONUNBUFFERED=1
 
-# Instalar dependências do sistema para MoviePy
+# Instalar FFmpeg e dependências necessárias para MoviePy
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
-    imagemagick \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -18,5 +21,16 @@ RUN mkdir -p uploads
 
 EXPOSE 5000
 
-# Aumentar timeout para 10 minutos e adicionar mais workers
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "2", "--timeout", "600", "--worker-class", "gthread", "--log-level", "info", "--access-logfile", "-", "--error-logfile", "-", "main:app"]
+# CRÍTICO: Timeout de 15 minutos + workers com threads
+CMD ["gunicorn", \
+     "--bind", "0.0.0.0:5000", \
+     "--workers", "1", \
+     "--threads", "4", \
+     "--worker-class", "gthread", \
+     "--timeout", "900", \
+     "--graceful-timeout", "900", \
+     "--keep-alive", "5", \
+     "--log-level", "info", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "main:app"]
