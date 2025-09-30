@@ -2,23 +2,21 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Instalar dependências do sistema
+ENV PYTHONUNBUFFERED=1
+
+# Instalar dependências do sistema para MoviePy
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
+    ffmpeg \
+    imagemagick \
     && rm -rf /var/lib/apt/lists/*
 
-# Copiar requirements e instalar
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar aplicação
 COPY . .
-
-# Criar diretório de uploads
 RUN mkdir -p uploads
 
-# Expor porta
 EXPOSE 5000
 
-# Usar gunicorn em produção
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "main:app"]
+# Aumentar timeout para 10 minutos e adicionar mais workers
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "2", "--timeout", "600", "--worker-class", "gthread", "--log-level", "info", "--access-logfile", "-", "--error-logfile", "-", "main:app"]
