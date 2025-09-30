@@ -2222,8 +2222,8 @@ HTML_TEMPLATE = """
         // Registry of templates by format with preview icon and label
         const TEMPLATE_REGISTRY = {
             watermark: [
-                { key: 'watermark', label: "Marca d'Água", icon: '🏷️' },
-                { key: 'watermark1', label: 'WaterMark1', icon: '🏷️' }
+                { key: 'watermark', label: "Marca d'Água - Pequena", icon: '🏷️' },
+                { key: 'watermark1', label: 'WaterMark - Grande', icon: '🏷️' }
             ],
             feed: [
                 { key: 'feed_1', label: 'Feed - Modelo 1', icon: '🖼️' },
