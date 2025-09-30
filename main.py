@@ -77,14 +77,14 @@ PLACID_TEMPLATES = {
     },
     'watermark': {
         'uuid': 'kky75obfzathq',
-        'name': 'Watermark',
+        'name': 'Marca d'água 1 Pequena',
         'description': 'Template para Watermark',
         'type': 'watermark',
         'dimensions': {'width': 1200, 'height': 1200}
     },
     'watermark1': {
         'uuid': 'wnmkfkbcsnsdo',
-        'name': 'Watermark1',
+        'name': 'Marca d'água 1 Grande',
         'description': 'Template para Watermark - Segundo Modelo',
         'type': 'watermark',
         'dimensions': {'width': 1200, 'height': 1200}
