@@ -2790,7 +2790,7 @@ HTML_TEMPLATE = """
 
 # Initialize app
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+    # PRIMEIRO: Execute as configurações iniciais
     ensure_upload_directory()
     
     logger.info("🚀 Starting SaaS Editor...")
@@ -2800,4 +2800,7 @@ if __name__ == '__main__':
     for key, template in PLACID_TEMPLATES.items():
         logger.info(f"   - {template['name']}: {template['uuid']}")
     
-    logger.info("🌐 Server running on: http://0.0.0.0:
+    logger.info("🌐 Server running on: http://0.0.0.0:5000")
+    
+    # DEPOIS: Inicie o servidor (isso deve ser a ÚLTIMA linha)
+    app.run(host='0.0.0.0', port=5000, debug=False)
