@@ -166,7 +166,7 @@ LOCAL_REELS_TEMPLATES = {
 AI_PROMPTS = {
     'legendas': """Gerador de Legendas Jornalísticas para Instagram
 
-Você é um jornalista especialista em copy para redes sociais, capaz de transformar descrições de notícias em legendas curtas, chamativas e informativas para posts de Instagram do jornal Tribuna Hoje. Sempre que receber uma descrição de notícia, siga rigorosamente estas instruções:
+Você é um jornalista especialista em copy para redes sociais, capaz de transformar descrições de notícias em legendas curtas, chamativas e informativas para posts de Instagram do Jornal Tribuna Hoje. Sempre que receber uma descrição de notícia, siga rigorosamente estas instruções:
 
 Análise Completa: Identifique os elementos centrais da notícia (quem, o quê, onde e consequência mais relevante) e INFIRA o assunto/tema principal (ex.: política, polícia, saúde, economia, clima, esporte, cultura, serviço).
 
@@ -174,24 +174,19 @@ Impacto Inicial: Comece a legenda com uma chamada forte e clara, destacando a in
 
 Contexto Curto: Acrescente 1 a 2 frases curtas que resumam o contexto de forma simples e acessível.
 
-Tom Jornalístico: Mantenha credibilidade, clareza e objetividade, sem sensacionalismo exagerado.
+Tom Jornalístico: Mantenha credibilidade, clareza e objetividade, sem sensacionalismo exagerado. Tom 100% jornalístico = sem abstrações da IA (com exceção do CTA e das tags). Tudo do próprio texto original com as devidas correções ortográficas.
 
-Palavras-Chave Obrigatórias: Inclua naturalmente termos que reforcem relevância jornalística, como "Alagoas", "Maceió", "Tribuna Hoje", "exclusivo", "urgente" quando fizer sentido.
+CTA Estratégico (SEPARADO): Crie um CTA em linha própria no final "🔗 Leia a matéria completa no nosso site, link da bio" "⚠️ Compartilhe a informação" "📣 Salve e repasse para quem precisa" "🌧️ Acompanhe os alertas oficiais" "💬 O que você acha? Comente aqui"
 
-CTA Estratégico (SEPARADO): Crie um CTA em linha própria, adequado ao assunto inferido. Exemplos por assunto:
-- Política/economia: "🔗 Leia a matéria completa no link da bio"
-- Polícia/segurança: "⚠️ Compartilhe a informação"
-- Saúde/serviço público: "📣 Salve e repasse para quem precisa"
-- Clima/transporte: "🌧️ Acompanhe os alertas oficiais"
-- Opinião/engajamento: "💬 O que você acha? Comente"
-
-Hashtags por Assunto (SEPARADAS): Gere 5 a 8 hashtags específicas ao tema, seguindo regras:
+Hashtags por Assunto (SEPARADAS): Gere 4 a 6 hashtags específicas sobre o tema, seguindo regras:
+- No final em linha própria
 - Inclua sempre #TribunaHoje e, quando fizer sentido, #Alagoas e #Maceio (sem acento)
 - Foque em termos do assunto (ex.: #Saude, #Seguranca, #Politica, #Economia, #Clima, #Cultura, #Esporte)
 - Use todas em minúsculas, sem acentos, sem espaços, separadas por espaço; não repita hashtags; evite genéricas demais (#news, #insta)
 
 Formatação Obrigatória da Saída (exatamente 3 blocos, nesta ordem, separados por 1 linha em branco, sem rótulos):
-1) Corpo da legenda (2 a 3 frases, 250–400 caracteres)
+
+1) Corpo da legenda (2 a 3 frases)
 
 2) CTA em linha única
 
@@ -201,8 +196,9 @@ Padrão de Estilo:
 - Primeira letra maiúscula em todas as frases do corpo
 - Parágrafos curtos e claros (1 a 3 linhas cada)
 - Não copiar literalmente a descrição original; reescreva com nova estrutura e escolha de palavras
-
+Ortografia Obrigatória: Use exclusivamente a ortografia oficial da língua portuguesa do Brasil conforme o Novo Acordo Ortográfico. Não cometa erros de grafia, acentuação, concordância ou pontuação. Revise cuidadosamente antes de enviar.
 Resposta Direta: Retorne SOMENTE o texto final no formato acima, sem comentários, explicações ou qualquer texto adicional.""",
+
 
     'titulo': """Gerador Avançado de Títulos Jornalísticos Impactantes
 
@@ -580,6 +576,7 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
     """
     Gera um vídeo de reels usando template de fundo "template1".
     Compõe: fundo fixo + vídeo centralizado + título superior.
+    O vídeo agora preenche toda a largura do template.
     Returns (filepath, public_url) or None.
     """
     if mpe is None:
@@ -606,6 +603,7 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
     try:
         width, height = template['dimensions']['width'], template['dimensions']['height']
         logger.info(f"Gerando reels com template: {template['name']}")
+        logger.info(f"Dimensões do template final: {width}x{height}")
         
         # Carrega o vídeo ou converte imagem para vídeo
         clip = None
@@ -613,7 +611,8 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
         logger.info(f"Tamanho do arquivo: {os.path.getsize(source_media_path)} bytes")
         try:
             clip = mpe.VideoFileClip(source_media_path)
-            logger.info(f"Vídeo carregado: {clip.w}x{clip.h}, duração: {clip.duration}s")
+            logger.info(f"Vídeo original carregado: {clip.w}x{clip.h}, duração: {clip.duration}s")
+            logger.info(f"Proporção do vídeo original: {clip.w/clip.h:.3f}")
         except Exception as e:
             logger.error(f"Erro específico ao carregar vídeo: {type(e).__name__}: {e}")
             # Se não for vídeo, criar um vídeo curto a partir de imagem
@@ -632,11 +631,11 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
                 logger.error(f"Falha ao abrir mídia: {type(e2).__name__}: {e2}")
                 return None
 
-        # Carrega a imagem de fundo baseada no template selecionado (pasta raiz do projeto)
+        # Carrega a imagem de fundo baseada no template selecionado
         if template_key == 'reels_modelo_2':
             template_bg_path = os.path.join(os.path.dirname(__file__), "template2.jpg")
         else:
-            template_bg_path = os.path.join(os.path.dirname(__file__), "template1.jpg")  # Default para modelo 1
+            template_bg_path = os.path.join(os.path.dirname(__file__), "template1.jpg")
             
         if not os.path.exists(template_bg_path):
             logger.error(f"Imagem de template não encontrada: {template_bg_path}")
@@ -645,47 +644,47 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
         
         logger.info(f"Usando template de fundo: {template_bg_path}")
         
-        # Cria o fundo usando a imagem template1 esticando para ocupar toda a tela
+        # Cria o fundo usando a imagem template esticando para ocupar toda a tela
         bg = mpe.ImageClip(template_bg_path).set_duration(clip.duration).resize((width, height))
-        
         logger.info(f"Fundo esticado para ocupar toda a tela: {width}x{height}")
         
-        # Redimensiona o vídeo para caber na área central com mais margem vertical
-        # Área disponível para vídeo: deixa mais espaço em cima e embaixo
-        video_area_top = 400  # Mais espaço para título e elementos superiores
-        video_area_bottom = 1520  # Mais espaço na parte inferior
+        # NOVA LÓGICA: Vídeo preenchendo toda a largura do template
+        # Área disponível para vídeo: deixa espaço para título
+        video_area_top = 400  # Espaço para título
+        video_area_bottom = 1520  # Espaço na parte inferior
         video_area_height = video_area_bottom - video_area_top
-        video_area_width = width - 120  # Margem lateral
         
-        # Calcula redimensionamento usando as dimensões específicas solicitadas (ligeiramente maiores)
-        # Dimensões ajustadas: um pouco maior em largura e altura
-        video_horizontal_width = 1080  # Mantém largura total
-        video_horizontal_height = 650  # Aumenta altura de 609 para 650 (+41px)
+        # MUDANÇA PRINCIPAL: Vídeo ocupa toda a largura do template
+        video_target_width = width  # Largura total do template (1080px)
         
-        # Verifica se cabe na área disponível, se não couber, reduz proporcionalmente
-        if video_horizontal_width > video_area_width:
-            # Reduz proporcionalmente se for maior que a área disponível
-            scale_factor = video_area_width / video_horizontal_width
-            video_horizontal_width = video_area_width
-            video_horizontal_height = int(video_horizontal_height * scale_factor)
+        # Calcula altura proporcional baseada na largura total
+        original_aspect_ratio = clip.w / clip.h
+        video_target_height = int(video_target_width / original_aspect_ratio)
         
-        if video_horizontal_height > video_area_height:
-            # Reduz proporcionalmente se for maior que a altura disponível
-            scale_factor = video_area_height / video_horizontal_height
-            video_horizontal_height = video_area_height
-            video_horizontal_width = int(video_horizontal_width * scale_factor)
+        logger.info(f"Proporção original do vídeo: {original_aspect_ratio:.3f}")
+        logger.info(f"Dimensões calculadas para largura total: {video_target_width}x{video_target_height}")
         
-        # Redimensiona o vídeo para as dimensões especificadas
-        resized_clip = clip.resize(newsize=(video_horizontal_width, video_horizontal_height))
+        # Verifica se a altura calculada cabe na área disponível
+        if video_target_height > video_area_height:
+            # Se não couber, ajusta pela altura disponível
+            video_target_height = video_area_height
+            video_target_width = int(video_target_height * original_aspect_ratio)
+            logger.info(f"Ajustado por altura disponível: {video_target_width}x{video_target_height}")
         
-        # Centraliza o vídeo horizontalmente na área disponível
-        video_x = (width - video_horizontal_width) // 2
-        video_y = video_area_top + (video_area_height - video_horizontal_height) // 2
+        # Redimensiona o vídeo para as dimensões calculadas
+        resized_clip = clip.resize(newsize=(video_target_width, video_target_height))
+        
+        # Centraliza o vídeo na área disponível
+        video_x = (width - video_target_width) // 2  # Centralizado horizontalmente
+        video_y = video_area_top + (video_area_height - video_target_height) // 2  # Centralizado verticalmente na área
         positioned_video = resized_clip.set_position((video_x, video_y))
         
-        logger.info(f"Vídeo redimensionado para dimensões específicas: {video_horizontal_width}x{video_horizontal_height} na posição ({video_x}, {video_y})")
+        logger.info(f"Vídeo redimensionado para: {video_target_width}x{video_target_height}")
+        logger.info(f"Posição do vídeo: ({video_x}, {video_y})")
+        logger.info(f"Proporção do vídeo final: {video_target_width/video_target_height:.3f}")
+        logger.info(f"Proporção do template final: {width/height:.3f}")
 
-        # Cria o título usando PIL em vez de MoviePy TextClip (mais simples e não precisa ImageMagick)
+        # Cria o título usando PIL
         title_clip = None
         if title_text:
             try:
@@ -755,8 +754,8 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
                 ensure_upload_directory()
                 title_img.save(title_path, format='PNG')
                 
-                # Cria o clip do título posicionado mais embaixo ainda
-                title_y_position = video_area_top + 60  # 60px dentro da área do vídeo (mais embaixo)
+                # Cria o clip do título posicionado
+                title_y_position = video_area_top + 60  # 60px dentro da área do vídeo
                 title_clip = mpe.ImageClip(title_path).set_duration(clip.duration).set_position((0, title_y_position))
                 
                 logger.info("Título criado com PIL e sobreposto como ImageClip")
@@ -1612,7 +1611,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SaaS Editor - Jornalistas Instagram</title>
+    <title>App Automação Instagram</title>
     <style>
         * {
             margin: 0;
@@ -1622,7 +1621,7 @@ HTML_TEMPLATE = """
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #c3161f 0%, #c3161f 100%);
             min-height: 100vh;
             color: #333;
         }
@@ -1993,8 +1992,8 @@ HTML_TEMPLATE = """
 <body>
     <div class="container">
         <div class="header">
-            <h1>📸 SaaS Editor</h1>
-            <p>Ferramenta completa para jornalistas criarem conteúdo para Instagram</p>
+            <h1>TRIBUNA HOJE APLICATIVO</h1>
+            <p>Ferramenta Completa Criação de Conteúdo Instagram</p>
         </div>
 
         <div class="tabs-container">
@@ -2800,5 +2799,4 @@ if __name__ == '__main__':
     for key, template in PLACID_TEMPLATES.items():
         logger.info(f"   - {template['name']}: {template['uuid']}")
     
-    logger.info("🌐 Server running on: http://0.0.0.0:5000")
-    app.run(debug=False, host='0.0.0.0', port=5000)
+    logger.info("🌐 Server running on: http://0.0.0.0:
