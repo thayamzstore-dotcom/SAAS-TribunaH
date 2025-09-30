@@ -1,17 +1,24 @@
-# Usa a imagem oficial do Python
-FROM python:3.10-slim
+FROM python:3.11-slim
 
-# Define diretório de trabalho
 WORKDIR /app
 
-# Copia arquivos
+# Instalar dependências do sistema
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copiar requirements e instalar
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copiar aplicação
 COPY . .
 
-# Expõe a porta (tem que ser a mesma do Flask)
-EXPOSE 8000
+# Criar diretório de uploads
+RUN mkdir -p uploads
 
-# Comando para iniciar o Flask
-CMD ["python", "main.py"]
+# Expor porta
+EXPOSE 5000
+
+# Usar gunicorn em produção
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "main:app"]
