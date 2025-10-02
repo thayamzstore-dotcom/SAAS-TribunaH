@@ -29,7 +29,7 @@ class Config:
     GROQ_API_KEY = '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'
     GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
     UPLOAD_FOLDER = os.path.abspath('uploads')
-    MAX_FILE_SIZE = 16 * 1024 * 1024  # 16MB
+    MAX_FILE_SIZE = 900 * 1024 * 1024  # 900MB
     ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'mp4', 'mov'}
 
 try:
