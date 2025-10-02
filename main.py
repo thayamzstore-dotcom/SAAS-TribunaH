@@ -166,13 +166,13 @@ LOCAL_REELS_TEMPLATES = {
 AI_PROMPTS = {
     'legendas': """Gerador de Legendas Jornalísticas para Instagram
 
-Você é um jornalista especialista em copy para redes sociais, capaz de transformar descrições de notícias em legendas curtas, chamativas e informativas para posts de Instagram do Jornal Tribuna Hoje. Sempre que receber uma descrição de notícia, siga rigorosamente estas instruções:
+Você é um jornalista especialista em copy para redes sociais, capaz de transformar descrições de notícias em legendas para o Instagram, chamativas e informativas para posts de Instagram do Jornal Tribuna Hoje. Sempre que receber uma descrição de notícia, siga rigorosamente estas instruções:
 
 Análise Completa: Identifique os elementos centrais da notícia (quem, o quê, onde e consequência mais relevante) e INFIRA o assunto/tema principal (ex.: política, polícia, saúde, economia, clima, esporte, cultura, serviço).
 
 Impacto Inicial: Comece a legenda com uma chamada forte e clara, destacando a informação mais importante ou surpreendente da descrição.
 
-Contexto Curto: Acrescente 1 a 2 frases curtas que resumam o contexto de forma simples e acessível.
+Contexto Mediano: Acrescente 3 a 4 frases que resumam o contexto de forma simples e acessível.
 
 Tom Jornalístico: Mantenha credibilidade, clareza e objetividade, sem sensacionalismo exagerado. Tom 100% jornalístico = sem abstrações da IA (com exceção do CTA e das tags). Tudo do próprio texto original com as devidas correções ortográficas.
 
@@ -194,7 +194,9 @@ Formatação Obrigatória da Saída (exatamente 3 blocos, nesta ordem, separados
 
 Padrão de Estilo:
 - Primeira letra maiúscula em todas as frases do corpo
+- Coloque os devidos pontos finais no fim de cada sentença
 - Parágrafos curtos e claros (1 a 3 linhas cada)
+- Não me dê a resposta com "**Corpo da legenda**" "**CTA**" "**Hashtags**"
 - Não copiar literalmente a descrição original; reescreva com nova estrutura e escolha de palavras
 Ortografia Obrigatória: Use exclusivamente a ortografia oficial da língua portuguesa do Brasil conforme o Novo Acordo Ortográfico. Não cometa erros de grafia, acentuação, concordância ou pontuação. Revise cuidadosamente antes de enviar.
 Resposta Direta: Retorne SOMENTE o texto final no formato acima, sem comentários, explicações ou qualquer texto adicional.""",
@@ -1145,8 +1147,6 @@ def configure_layers_for_template(template_key: str, template_info: Dict[str, An
         else:
             logger.info("⏭️ No credits provided")
             
-        layers["credit"] = {"text": "Tribuna Hoje"}
-        logger.info("✅ Added credit layer: Tribuna Hoje")
         
     elif template_type == 'story' and title:
         layers["titulocopy"] = {"text": title}
@@ -1777,7 +1777,7 @@ HTML_TEMPLATE = """
             display: block;
             margin-bottom: 5px;
             font-weight: 600;
-            color: #ffffff;
+            color: #2c3e50;
         }
 
         .control-input {
@@ -2103,7 +2103,7 @@ HTML_TEMPLATE = """
                 <div class="controls-section">
                     <div class="control-group">
                         <label class="control-label">Cole o texto da notícia ou link</label>
-                        <textarea class="control-input" id="noticia-texto" rows="6" placeholder="Cole aqui o texto da notícia ou o link para análise..."></textarea>
+                        <textarea class="control-input" id="noticia-texto" rows="6" placeholder="Cole aqui o texto completo da notícia"></textarea>
                     </div>
 
                     <div class="loading" id="title-loading">
@@ -2144,7 +2144,7 @@ HTML_TEMPLATE = """
                 <div class="controls-section">
                     <div class="control-group">
                         <label class="control-label">Cole o texto da notícia ou link</label>
-                        <textarea class="control-input" id="legenda-texto" rows="6" placeholder="Cole aqui o texto da notícia ou o link para análise..."></textarea>
+                        <textarea class="control-input" id="legenda-texto" rows="6" placeholder="Cole aqui o texto da notícia"></textarea>
                     </div>
 
                     <div class="loading" id="caption-loading">
