@@ -803,23 +803,31 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
         out_path = os.path.join(Config.UPLOAD_FOLDER, out_filename)
         
         fps = None
-        try:
-            fps = int(getattr(clip, 'fps', 30) or 30)
-        except Exception:
-            fps = 30
+        # Exporta o vídeo
+out_filename = generate_filename(template_key, "mp4")
+out_path = os.path.join(Config.UPLOAD_FOLDER, out_filename)
 
-        logger.info(f"Exportando vídeo para: {out_path}")
-        try:
-            composed.write_videofile(
-                out_path,
-                fps=min(max(fps, 24), 60),
-                codec='libx264',
-                audio_codec='aac',
-                threads=2,
-                preset='medium',
-                verbose=False,
-                logger=None
-            )
+fps = None
+try:
+    fps = int(getattr(clip, 'fps', 30) or 30)
+except Exception:
+    fps = 30
+
+logger.info(f"Exportando vídeo para: {out_path}")
+logger.info(f"Tamanho original: {os.path.getsize(source_media_path) / (1024*1024):.2f}MB")
+
+try:
+    composed.write_videofile(
+        out_path,
+        fps=24,                      
+        codec='libx264',
+        audio_codec='aac',
+        threads=4,                  
+        preset='ultrafast',         
+        bitrate='2000k',             
+        verbose=True,
+        logger='bar'
+    )
             logger.info("Exportação concluída!")
         except Exception as e:
             logger.error(f"Erro na exportação: {type(e).__name__}: {e}")
