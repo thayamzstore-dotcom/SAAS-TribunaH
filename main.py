@@ -2238,7 +2238,7 @@ HTML_TEMPLATE = """
         const TEMPLATE_REGISTRY = {
             watermark: [
                 { key: 'watermark', label: "Logo Grande", icon: '🏷️' },
-                { key: 'watermark1', label: 'Logo Pequeno', icon: '🏷️' }
+                { key: 'watermark_1', label: 'Logo Pequeno', icon: '🏷️' }
             ],
             feed: [
                 { key: 'feed_1', label: 'Feed - Modelo 1', icon: '🖼️' },
