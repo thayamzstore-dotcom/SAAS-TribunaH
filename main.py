@@ -2255,6 +2255,26 @@ HTML_TEMPLATE = """
                 { key: 'reels_modelo_2', label: 'Reels 2 - Lateral', icon: '🎬'},
             ]
         };
+];
+    };  // ← Fecha TEMPLATE_REGISTRY (linha 113)
+
+    // ADICIONE AQUI:
+    const PLACID_TEMPLATES = {
+        'watermark': { type: 'watermark', uuid: 'kky75obfzathq' },
+        'watermark_1': { type: 'watermark', uuid: 'wnmkfkbcsnsdo' },
+        'feed_1': { type: 'feed', uuid: 'bvxnkfasqpbl9' },
+        'feed_2': { type: 'feed', uuid: '33moedpfusmbo' },
+        'feed_3': { type: 'feed', uuid: 'efnadlehh2ato' },
+        'feed_4': { type: 'feed', uuid: 'hmnyoopxig4cm' },
+        'stories_1': { type: 'story', uuid: 'dfgp8e0wosomx' },
+        'stories_2': { type: 'story', uuid: 'plrlpyk5wwjvw' },
+        'reels_modelo_1': { type: 'reels' },
+        'reels_modelo_2': { type: 'reels' }
+    };
+    
+    const FORMAT_PREVIEW = {  // ← Isso já existe (linha ~115)
+        watermark: "Prévia: aplica apenas a marca d'água sobre a imagem enviada.",
+
 
         const FORMAT_PREVIEW = {
             watermark: "Prévia: aplica apenas a marca d'água sobre a imagem enviada.",
