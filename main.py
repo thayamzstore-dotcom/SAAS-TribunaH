@@ -2303,9 +2303,9 @@ HTML_TEMPLATE = """
             const file = input.files[0];
             if (!file) return;
             
-            // Validate file size (16MB limit)
-            if (file.size > 16 * 1024 * 1024) {
-                showError('Arquivo muito grande. Limite: 16MB', type);
+            // Validate file size (900MB limit)
+            if (file.size > 900 * 1024 * 1024) {
+                showError('Arquivo muito grande. Limite: 900MB', type);
                 return;
             }
             
