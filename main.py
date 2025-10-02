@@ -2487,17 +2487,20 @@ HTML_TEMPLATE = """
             const creditos = document.getElementById('creditos').value.trim();
             
             // Validate required fields based on template
-if (selectedTemplate.includes('feed') && (!titulo || !assunto || !creditos)) {
+const templateInfo = PLACID_TEMPLATES[selectedTemplate];
+const templateType = templateInfo ? templateInfo.type : selectedFormat;
+
+if (templateType === 'feed' && (!titulo || !assunto || !creditos)) {
     showError('Para templates de Feed, título, assunto e créditos são obrigatórios.', 'post');
     return;
 }
 
-if (selectedTemplate.includes('reels') && !titulo) {
+if (templateType === 'reels' && !titulo) {
     showError('Para templates de Reels, o título é obrigatório.', 'post');
     return;
 }
 
-// Watermark não exige título - permite vazio
+// Watermark não exige campos obrigatórios - permite vazios
 
             showLoading('post');
             
