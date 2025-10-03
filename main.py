@@ -1142,7 +1142,7 @@ def configure_layers_for_template(template_key: str, template_info: Dict[str, An
             logger.info("⏭️ No subject provided")
             
         if credits:
-            layers["creditfoto"] = {"text":"{credits}"}
+            layers["creditfoto"] = {"text": f" {credits}"}
             logger.info(f"✅ Added credits layer: {credits}")
         else:
             logger.info("⏭️ No credits provided")
