@@ -258,17 +258,6 @@ Ortografia Obrigatória: Use exclusivamente a ortografia oficial da língua port
 
 Resposta Direta: Retorne SOMENTE o texto final no formato esperado, sem comentários, explicações ou qualquer texto adicional.
 
-Exemplos:
-
-Descrição original: "Hospital de Maceió registra aumento nos casos de dengue."
-Título gerado: "Casos De Dengue DISPARAM Em Maceió E Hospital Soa Alerta Para A População..."
-
-Descrição original: "MPF recomenda regras mais rígidas para construções na orla da Barra de São Miguel."
-Título gerado: "EXCLUSIVO: MPF Impõe Regras Mais Rígidas Para Construções Na Orla Da Barra..."
-
-Descrição original: "Motoristas de aplicativo devem manter MEI regular para garantir isenção do IPVA."
-Título gerado: "Motoristas De Aplicativo Precisam Regularizar MEI Para Garantir Isenção Do IPVA..."
-
 Sua tarefa: Gerar apenas o título final com base na notícia completa dada na caixa de texto, seguindo todas as regras acima.""",
 
     'reescrita': """Modelador de Notícias – Estilo Tribuna Hoje
@@ -307,13 +296,6 @@ Título no topo.
 Subtítulo (quando necessário).
 
 Texto corrido entre 4 e 8 parágrafos.
-
-Notícia bruta:
-"Gaspar foi escolhido relator da comissão que vai investigar fraudes no INSS."
-
-Modelada para Tribuna Hoje:
-Título: Alfredo Gaspar assume relatoria da CPMI que investiga fraudes no INSS
-Texto: O deputado federal Alfredo Gaspar (União Brasil-AL) foi designado relator da Comissão Parlamentar Mista de Inquérito (CPMI) que apura possíveis fraudes no Instituto Nacional do Seguro Social (INSS). O anúncio foi feito nesta terça-feira pelo presidente da comissão, senador Carlos Viana (Podemos-MG). Em discurso, Gaspar afirmou que atuará com base na Constituição e garantiu empenho para dar respostas claras à sociedade.
 
 Instrução Final:
 
