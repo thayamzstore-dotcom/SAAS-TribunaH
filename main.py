@@ -22,12 +22,14 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 
+
+import os
 # Configuration
 class Config:
     PLACID_API_TOKEN = 'placid-mmv6puv1gvuucitb-hhflfvh5yeru1ijl'
     PLACID_API_URL = 'https://api.placid.app/api/rest/images'
-    GROQ_API_KEY = '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'
-    GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
+    OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
     UPLOAD_FOLDER = os.path.abspath('uploads')
     MAX_FILE_SIZE = 700 * 1024 * 1024  # 700MB
     ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'mp4', 'mov'}
@@ -858,10 +860,10 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
         logger.error(f"Traceback: {traceback.format_exc()}")
         return None
 
-def call_groq_api(prompt: str, content: str, max_tokens: int = 1000) -> Optional[str]:
-    """Call Groq API with error handling and retries"""
-    if not Config.GROQ_API_KEY or Config.GROQ_API_KEY == 'your-api-key-here':
-        logger.warning("Groq API key not configured")
+def call_openai_api(prompt: str, content: str, max_tokens: int = 1000) -> Optional[str]:
+    """Call OpenAI API with error handling and retries"""
+    if not Config.OPENAI_API_KEY or Config.OPENAI_API_KEY == '':
+        logger.warning("OpenAI API key not configured")
         return None
     
     # Truncate content to prevent API limits
@@ -870,27 +872,30 @@ def call_groq_api(prompt: str, content: str, max_tokens: int = 1000) -> Optional
     
     full_prompt = f"{prompt}\n\nConteúdo para processar:\n{content}"
     
-    if len(full_prompt) > 8000:
-        full_prompt = full_prompt[:8000] + "..."
+    if len(full_prompt) > 12000:
+        full_prompt = full_prompt[:12000] + "..."
     
     headers = {
-        'Authorization': f'Bearer {Config.GROQ_API_KEY}',
+        'Authorization': f'Bearer {Config.OPENAI_API_KEY}',
         'Content-Type': 'application/json'
     }
     
     payload = {
-        "messages": [{"role": "user", "content": full_prompt}],
-        "model": "llama-3.1-8b-instant",
-        "max_tokens": min(max_tokens, 500),
+        "model": "gpt-3.5-turbo",
+        "messages": [
+            {"role": "system", "content": "Você é um assistente especializado em jornalismo."},
+            {"role": "user", "content": full_prompt}
+        ],
+        "max_tokens": min(max_tokens, 1000),
         "temperature": 0.7
     }
     
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            logger.info(f"Calling Groq API (attempt {attempt + 1})")
+            logger.info(f"Calling OpenAI API (attempt {attempt + 1})")
             response = requests.post(
-                Config.GROQ_API_URL, 
+                Config.OPENAI_API_URL, 
                 json=payload, 
                 headers=headers,
                 timeout=30
@@ -900,12 +905,12 @@ def call_groq_api(prompt: str, content: str, max_tokens: int = 1000) -> Optional
                 result = response.json()
                 return result['choices'][0]['message']['content'].strip()
             else:
-                logger.error(f"Groq API error: {response.status_code} - {response.text}")
+                logger.error(f"OpenAI API error: {response.status_code} - {response.text}")
                 
         except requests.exceptions.RequestException as e:
-            logger.error(f"Groq API request failed (attempt {attempt + 1}): {e}")
+            logger.error(f"OpenAI API request failed (attempt {attempt + 1}): {e}")
             if attempt < max_retries - 1:
-                time.sleep(2 ** attempt)  # Exponential backoff
+                time.sleep(2 ** attempt)
     
     return None
 
@@ -1458,7 +1463,7 @@ def handle_generate_title(payload: Dict[str, Any], request) -> jsonify:
     if not content:
         return jsonify(error_response("News content is required"))
     
-    suggested_title = call_groq_api(AI_PROMPTS['titulo'], content, max_tokens=200)
+    suggested_title = call_openai_api(AI_PROMPTS['titulo'], content, max_tokens=200)
     
     if suggested_title:
         return jsonify(success_response(
@@ -1484,14 +1489,14 @@ def handle_generate_captions(payload: Dict[str, Any], request) -> jsonify:
     if not content:
         return jsonify(error_response("Content is required"))
     
-    generated_caption = call_groq_api(AI_PROMPTS['legendas'], content, max_tokens=500)
+    generated_caption = call_openai_api(AI_PROMPTS['legendas'], content, max_tokens=500)
     
     if generated_caption:
         captions = [generated_caption]
         
         # Generate variations
         for _ in range(2):
-            variation = call_groq_api(AI_PROMPTS['legendas'], content, max_tokens=500)
+            variation = call_openai_api(AI_PROMPTS['legendas'], content, max_tokens=500)
             if variation and variation not in captions:
                 captions.append(variation)
         
@@ -1517,7 +1522,7 @@ def handle_rewrite_news(payload: Dict[str, Any], request) -> jsonify:
     if not content:
         return jsonify(error_response("News content is required"))
     
-    rewritten_content = call_groq_api(AI_PROMPTS['reescrita'], content, max_tokens=1500)
+    rewritten_content = call_openai_api(AI_PROMPTS['reescrita'], content, max_tokens=1500)
     
     if rewritten_content:
         lines = rewritten_content.strip().split('\n')
