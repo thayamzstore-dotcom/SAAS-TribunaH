@@ -836,6 +836,7 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
 def generate_local_capa_jornal(source_media_path: str) -> Optional[Tuple[str, str]]:
     """
     Gera uma imagem de capa de jornal sobrepondo a foto do usuário no template.
+    Mantém proporção original da imagem sem distorcer.
     Returns (filepath, public_url) or None.
     """
     try:
@@ -843,10 +844,10 @@ def generate_local_capa_jornal(source_media_path: str) -> Optional[Tuple[str, st
         template_bg_path = os.path.join(os.path.dirname(__file__), "template_capa_jornal.jpg")
         
         if not os.path.exists(template_bg_path):
-            logger.error("Template de capa não encontrado: {template_bg_path}")
+            logger.error(f"Template de capa não encontrado: {template_bg_path}")
             return None
         
-        logger.info("Carregando template de capa: {template_bg_path}")
+        logger.info(f"Carregando template de capa: {template_bg_path}")
         
         # Abre o template
         background = Image.open(template_bg_path).convert('RGB')
@@ -857,24 +858,42 @@ def generate_local_capa_jornal(source_media_path: str) -> Optional[Tuple[str, st
         with Image.open(source_media_path) as user_img:
             user_img = user_img.convert('RGB')
             
-            # Área onde a imagem será colocada (ajuste conforme as guias vermelhas)
-            # Baseado na imagem, a área útil começa em x=170, y=50 e tem largura=650, altura=1170
-            target_x = 170
-            target_y = 50
-            target_width = 650
-            target_height = 1170
+            # Área onde a imagem será colocada
+            target_x = 58
+            target_y = 45
+            target_width = 880
+            target_height = 1330
             
-            # Redimensiona a imagem do usuário para caber na área
-            user_img_resized = user_img.resize((target_width, target_height), Image.LANCZOS)
+            # ===== NOVO: Redimensionamento SEM DISTORÇÃO =====
+            # Calcula proporção da imagem original
+            original_ratio = user_img.width / user_img.height
+            target_ratio = target_width / target_height
             
-            # Cola a imagem do usuário sobre o template
-            background.paste(user_img_resized, (target_x, target_y))
+            # Redimensiona mantendo proporção (cabe dentro da área)
+            if original_ratio > target_ratio:
+                # Imagem mais larga: ajusta pela largura
+                new_width = target_width
+                new_height = int(target_width / original_ratio)
+            else:
+                # Imagem mais alta: ajusta pela altura
+                new_height = target_height
+                new_width = int(target_height * original_ratio)
+            
+            # Redimensiona com alta qualidade
+            user_img_resized = user_img.resize((new_width, new_height), Image.LANCZOS)
+            
+            # Centraliza a imagem na área disponível
+            paste_x = target_x + (target_width - new_width) // 2
+            paste_y = target_y + (target_height - new_height) // 2
+            
+            # Cola a imagem centralizada
+            background.paste(user_img_resized, (paste_x, paste_y))
         
-        # Salva o resultado
-        out_filename = generate_filename("feed_capa_jornal", "png")
+        # Salva o resultado com alta qualidade
+        out_filename = generate_filename("feed_capa_jornal", "jpg")
         out_path = os.path.join(Config.UPLOAD_FOLDER, out_filename)
         ensure_upload_directory()
-        background.save(out_path, format="PNG", quality=95)
+        background.save(out_path, format="JPEG", quality=95, optimize=True)
         
         public_url = f"{request.url_root}uploads/{out_filename}"
         logger.info(f"Capa de jornal gerada: {public_url}")
