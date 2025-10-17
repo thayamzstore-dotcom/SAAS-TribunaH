@@ -553,7 +553,7 @@ def _create_title_overlay_for_template(width: int, height: int, title_text: str,
         return overlay
         
     except Exception as e:
-        logger.error(f"Erro ao criar overlay Tribuna Hoje: {e}")
+        logger.error("Erro ao criar overlay Tribuna Hoje: {e}")
         return None
 
 def _wrap_text(text: str, font: ImageFont.ImageFont, max_width: int) -> list:
@@ -596,6 +596,297 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
         logger.error("Tente: pip install moviepy imageio imageio-ffmpeg")
         return None
     
+    # Teste de componentes MoviePy
+    logger.info("Testando importações do MoviePy...")
+    try:
+        from moviepy.editor import VideoFileClip, ImageClip, ColorClip, CompositeVideoClip, TextClip
+        logger.info("Importações básicas OK")
+    except Exception as e:
+        logger.error(f"Falha nas importações: {e}")
+        return None
+    
+    # Verifica se o template existe
+    if template_key not in LOCAL_REELS_TEMPLATES:
+        logger.error(f"Template de reels não encontrado: {template_key}")
+        return None
+    
+    template = LOCAL_REELS_TEMPLATES[template_key]
+    
+    try:
+        width, height = template['dimensions']['width'], template['dimensions']['height']
+        logger.info(f"Gerando reels com template: {template['name']}")
+        logger.info(f"Dimensões do template final: {width}x{height}")
+        
+        # Carrega o vídeo ou converte imagem para vídeo
+        clip = None
+        logger.info(f"Verificando arquivo: {os.path.exists(source_media_path)}")
+        logger.info(f"Tamanho do arquivo: {os.path.getsize(source_media_path)} bytes")
+        try:
+            clip = mpe.VideoFileClip(source_media_path)
+            logger.info(f"Vídeo original carregado: {clip.w}x{clip.h}, duração: {clip.duration}s")
+            logger.info(f"Proporção do vídeo original: {clip.w/clip.h:.3f}")
+        except Exception as e:
+            logger.error(f"Erro específico ao carregar vídeo: {type(e).__name__}: {e}")
+            logger.info("Convertendo imagem para vídeo")
+            try:
+                with Image.open(source_media_path) as img:
+                    img = img.convert('RGB')
+                    temp_img = generate_filename("reels_from_image", "png")
+                    temp_path = os.path.join(Config.UPLOAD_FOLDER, temp_img)
+                    ensure_upload_directory()
+                    img.save(temp_path, format='PNG')
+                image_clip = mpe.ImageClip(temp_path).set_duration(5)
+                clip = image_clip.set_fps(30)
+                logger.info("Imagem convertida para vídeo com sucesso")
+            except Exception as e2:
+                logger.error(f"Falha ao abrir mídia: {type(e2).__name__}: {e2}")
+                return None
+
+        # Carrega a imagem de fundo baseada no template selecionado
+        if template_key == 'reels_modelo_2':
+            template_bg_path = os.path.join(os.path.dirname(__file__), "template2.jpg")
+        else:
+            template_bg_path = os.path.join(os.path.dirname(__file__), "template1.jpg")
+            
+        if not os.path.exists(template_bg_path):
+            logger.error(f"Imagem de template não encontrada: {template_bg_path}")
+            logger.error(f"Template key: {template_key}")
+            return None
+        
+        logger.info(f"Usando template de fundo: {template_bg_path}")
+        
+        # Cria o fundo usando a imagem template esticando para ocupar toda a tela
+        bg = mpe.ImageClip(template_bg_path).set_duration(clip.duration).resize((width, height))
+        logger.info(f"Fundo esticado para ocupar toda a tela: {width}x{height}")
+        
+        # NOVA LÓGICA: Vídeo preenchendo toda a largura do template
+        video_area_top = 400
+        video_area_bottom = 1520
+        video_area_height = video_area_bottom - video_area_top
+        
+        video_target_width = width
+        
+        original_aspect_ratio = clip.w / clip.h
+        video_target_height = int(video_target_width / original_aspect_ratio)
+        
+        logger.info(f"Proporção original do vídeo: {original_aspect_ratio:.3f}")
+        logger.info(f"Dimensões calculadas para largura total: {video_target_width}x{video_target_height}")
+        
+        if video_target_height > video_area_height:
+            video_target_height = video_area_height
+            video_target_width = int(video_target_height * original_aspect_ratio)
+            logger.info(f"Ajustado por altura disponível: {video_target_width}x{video_target_height}")
+        
+        resized_clip = clip.resize(newsize=(video_target_width, video_target_height))
+        
+        video_x = (width - video_target_width) // 2
+        video_y = video_area_top + (video_area_height - video_target_height) // 2
+        positioned_video = resized_clip.set_position((video_x, video_y))
+        
+        logger.info(f"Vídeo redimensionado para: {video_target_width}x{video_target_height}")
+        logger.info(f"Posição do vídeo: ({video_x}, {video_y})")
+
+        title_clip = None
+        if title_text:
+            try:
+                if template_key == 'reels_modelo_2':
+                    canvas_height = 250
+                    font_size = 51
+                    line_height = 70
+                    text_align = 'left'
+                    margin_left = 90
+                    title_y_position = video_area_top - 7
+                else:
+                    canvas_height = 400
+                    font_size = 50
+                    line_height = 70
+                    text_align = 'center'
+                    margin_left = 60
+                    title_y_position = video_area_top - 62
+                
+                title_img = Image.new('RGBA', (width, canvas_height), (0, 0, 0, 0))
+                draw = ImageDraw.Draw(title_img)
+                
+                font = None
+                try:
+                    font = ImageFont.truetype("Oswald-Bold.ttf", font_size)
+                    logger.info(f"Fonte Oswald-Bold.ttf carregada: {font_size}px")
+                except Exception:
+                    try:
+                        font = ImageFont.truetype("arialbd.ttf", font_size)
+                    except Exception:
+                        font = ImageFont.load_default()
+                
+                text = title_text.upper().strip()
+                max_width = width - (margin_left * 2)
+                
+                words = text.split()
+                lines = []
+                current_line = []
+                
+                for word in words:
+                    test_line = ' '.join(current_line + [word])
+                    bbox = draw.textbbox((0, 0), test_line, font=font)
+                    text_width = bbox[2] - bbox[0]
+                    
+                    if text_width <= max_width:
+                        current_line.append(word)
+                    else:
+                        if current_line:
+                            lines.append(' '.join(current_line))
+                            current_line = [word]
+                        else:
+                            lines.append(word)
+                
+                if current_line:
+                    lines.append(' '.join(current_line))
+                
+                total_height = len(lines) * line_height
+                start_y = (canvas_height - total_height) // 2
+                
+                for i, line in enumerate(lines):
+                    bbox = draw.textbbox((0, 0), line, font=font)
+                    text_width = bbox[2] - bbox[0]
+                    
+                    if text_align == 'left':
+                        x = margin_left
+                    else:
+                        x = (width - text_width) // 2
+                    
+                    y = start_y + i * line_height
+                    
+                    draw.text((x, y), line, font=font, fill=(255, 255, 255, 255))
+                
+                title_filename = generate_filename("title_overlay", "png")
+                title_path = os.path.join(Config.UPLOAD_FOLDER, title_filename)
+                ensure_upload_directory()
+                title_img.save(title_path, format='PNG')
+                
+                title_clip = mpe.ImageClip(title_path).set_duration(clip.duration).set_position((0, title_y_position))
+                logger.info(f"Título criado: {template_key}, align={text_align}, size={font_size}px")
+                
+            except Exception as e:
+                logger.error(f"Falha ao criar título: {e}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+
+        clips_to_compose = [bg, positioned_video]
+        if title_clip:
+            clips_to_compose.append(title_clip)
+        
+        composed = mpe.CompositeVideoClip(clips_to_compose)
+
+        try:
+            if hasattr(clip, 'audio') and clip.audio is not None:
+                composed = composed.set_audio(clip.audio)
+                logger.info("Áudio original preservado")
+        except Exception as e:
+            logger.warning(f"Não foi possível preservar áudio: {e}")
+
+        out_filename = generate_filename(template_key, "mp4")
+        out_path = os.path.join(Config.UPLOAD_FOLDER, out_filename)
+        
+        fps = None
+        try:
+            fps = int(getattr(clip, 'fps', 30) or 30)
+        except Exception:
+            fps = 30
+
+        logger.info(f"Exportando vídeo para: {out_path}")
+        try:
+            composed.write_videofile(
+                out_path,
+                fps=min(max(fps, 24), 60),
+                codec='libx264',
+                audio_codec='aac',
+                threads=2,
+                preset='medium',
+                verbose=False,
+                logger=None
+            )
+            logger.info("Exportação concluída!")
+        except Exception as e:
+            logger.error(f"Erro na exportação: {type(e).__name__}: {e}")
+            import traceback
+            logger.error(f"Traceback exportação: {traceback.format_exc()}")
+            return None
+
+        try:
+            if clip is not None:
+                clip.close()
+            if 'resized_clip' in locals():
+                resized_clip.close()
+            if 'composed' in locals():
+                composed.close()
+            if title_clip is not None:
+                title_clip.close()
+        except Exception:
+            pass
+
+        public_url = f"{request.url_root}uploads/{out_filename}"
+        logger.info(f"Reels gerado com sucesso: {public_url}")
+        return out_path, public_url
+        
+    except Exception as e:
+        logger.error(f"Falha ao gerar vídeo local de reels: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return None
+    
+def generate_local_capa_jornal(source_media_path: str) -> Optional[Tuple[str, str]]:
+    """
+    Gera uma imagem de capa de jornal sobrepondo a foto do usuário no template.
+    Returns (filepath, public_url) or None.
+    """
+    try:
+        # Carrega o template de fundo
+        template_bg_path = os.path.join(os.path.dirname(__file__), "template_capa_jornal.jpg")
+        
+        if not os.path.exists(template_bg_path):
+            logger.error("Template de capa não encontrado: {template_bg_path}")
+            return None
+        
+        logger.info("Carregando template de capa: {template_bg_path}")
+        
+        # Abre o template
+        background = Image.open(template_bg_path).convert('RGB')
+        bg_width, bg_height = background.size
+        logger.info(f"Template carregado: {bg_width}x{bg_height}")
+        
+        # Carrega a imagem do usuário
+        with Image.open(source_media_path) as user_img:
+            user_img = user_img.convert('RGB')
+            
+            # Área onde a imagem será colocada (ajuste conforme as guias vermelhas)
+            # Baseado na imagem, a área útil começa em x=170, y=50 e tem largura=650, altura=1170
+            target_x = 170
+            target_y = 50
+            target_width = 650
+            target_height = 1170
+            
+            # Redimensiona a imagem do usuário para caber na área
+            user_img_resized = user_img.resize((target_width, target_height), Image.LANCZOS)
+            
+            # Cola a imagem do usuário sobre o template
+            background.paste(user_img_resized, (target_x, target_y))
+        
+        # Salva o resultado
+        out_filename = generate_filename("feed_capa_jornal", "png")
+        out_path = os.path.join(Config.UPLOAD_FOLDER, out_filename)
+        ensure_upload_directory()
+        background.save(out_path, format="PNG", quality=95)
+        
+        public_url = f"{request.url_root}uploads/{out_filename}"
+        logger.info(f"Capa de jornal gerada: {public_url}")
+        
+        return out_path, public_url
+        
+    except Exception as e:
+        logger.error(f"Erro ao gerar capa de jornal: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return None
+
     # Teste de componentes MoviePy
     logger.info("Testando importações do MoviePy...")
     try:
@@ -1349,13 +1640,8 @@ def handle_generate_post(payload: Dict[str, Any], request) -> jsonify:
     logger.info("=" * 50)
     logger.info("🚀 STARTING handle_generate_post")
     logger.info(f"📦 Payload received: {payload}")
-    logger.info(f"🔍 Request files: {request.files}")
-    logger.info(f"🔍 Request form: {request.form}")
     
     file = request.files.get('file') if hasattr(request, 'files') else None
-    logger.info(f"📁 File object: {file}")
-    logger.info(f"📁 File filename: {file.filename if file else 'None'}")
-    logger.info(f"📁 File content type: {file.content_type if file else 'None'}")
     
     if not file:
         logger.error("❌ No file provided")
@@ -1364,69 +1650,70 @@ def handle_generate_post(payload: Dict[str, Any], request) -> jsonify:
     logger.info("✅ File validation passed")
     
     # Validate required fields
-    template_key = payload.get('template', 'feed_1_red')
+    template_key = payload.get('template', 'feed_1')
     title = payload.get('title', '')
     subject = payload.get('subject', '')
     credits = payload.get('credits', '')
     
     logger.info(f"🎯 Template key: {template_key}")
-    logger.info(f"📝 Title: {title}")
-    logger.info(f"📝 Subject: {subject}")
-    logger.info(f"📝 Credits: {credits}")
     
-    # Check if it's a local reels template first
-    if template_key in LOCAL_REELS_TEMPLATES:
-        logger.info("🎬 Using local reels video compositor (no Placid)")
-        # Upload file first
-        logger.info("💾 Starting file upload process for reels")
+    # Check if it's the capa de jornal template
+    if template_key == 'feed_capa_jornal':
+        logger.info("📰 Using local capa de jornal compositor")
         success, filepath, public_url = save_uploaded_file(file, "post")
-        logger.info(f"💾 Upload result - Success: {success}, Filepath: {filepath}, URL: {public_url}")
         
         if not success:
-            logger.error(f"❌ File upload failed: {public_url}")
+            logger.error(f"File upload failed: {public_url}")
+            return jsonify(error_response(public_url))
+        
+        generated = generate_local_capa_jornal(filepath)
+        if not generated:
+            return jsonify(error_response("Falha ao gerar capa de jornal"))
+        
+        _, public_out_url = generated
+        return jsonify(success_response(
+            "Capa de jornal gerada com sucesso!",
+            imageUrl=public_out_url
+        ))
+    
+    # Check if it's a local reels template
+    if template_key in LOCAL_REELS_TEMPLATES:
+        logger.info("🎬 Using local reels video compositor")
+        success, filepath, public_url = save_uploaded_file(file, "post")
+        
+        if not success:
             return jsonify(error_response(public_url))
         
         generated = generate_local_reels_video(filepath, title, template_key)
         if not generated:
-            return jsonify(error_response("Falha ao gerar reels localmente"))
+            return jsonify(error_response("Falha ao gerar reels"))
+        
         _, public_out_url = generated
         return jsonify(success_response(
             "Reels gerado com sucesso!",
             videoUrl=public_out_url
         ))
     
+    # Normal Placid template processing
     if template_key not in PLACID_TEMPLATES:
-        logger.warning(f"⚠️ Template {template_key} not found, using fallback")
-        template_key = 'feed_1'  # Fallback
+        template_key = 'feed_1'
     
     template_info = PLACID_TEMPLATES[template_key]
-    logger.info(f"🎨 Template info: {template_info}")
     
-    # Check if feed template requires additional fields
     if template_info['type'] == 'feed':
-        logger.info("🔍 Checking feed template requirements")
         if not subject or not credits:
-            logger.error(f"❌ Feed template missing fields - Subject: {subject}, Credits: {credits}")
             return jsonify(error_response("Feed templates require subject and credits"))
-        logger.info("✅ Feed template requirements met")
     
-    logger.info("💾 Starting file upload process")
     success, filepath, public_url = save_uploaded_file(file, "post")
-    logger.info(f"💾 Upload result - Success: {success}, Filepath: {filepath}, URL: {public_url}")
-    
     if not success:
-        logger.error(f"❌ File upload failed: {public_url}")
         return jsonify(error_response(public_url))
     
-
-    logger.info("🔧 Configuring layers for template")
     layers = configure_layers_for_template(
         template_key, template_info, public_url,
         title=title,
         subject=subject,
         credits=credits
     )
-    logger.info(f"🔧 Layers configured: {layers}")
     
     modifications = {
         "filename": f"instagram_post_{int(time.time())}.png",
@@ -1434,27 +1721,21 @@ def handle_generate_post(payload: Dict[str, Any], request) -> jsonify:
         "height": template_info['dimensions']['height'],
         "image_format": "png"
     }
-    logger.info(f"⚙️ Modifications: {modifications}")
     
-    logger.info("🎨 Creating Placid image")
     result = create_placid_image(template_info['uuid'], layers, modifications)
-    logger.info(f"🎨 Placid result: {result}")
     
     if result:
         if result.get('image_url'):
-            logger.info("✅ Image created with direct URL")
             return jsonify(success_response(
                 "Post generated successfully!",
                 imageUrl=result['image_url']
             ))
         else:
-            logger.info("⏳ Image processing in background")
             return jsonify(success_response(
                 "Post processing...",
                 imageId=result.get('id')
             ))
     else:
-        logger.error("❌ Failed to create post in Placid")
         return jsonify(error_response("Failed to create post"))
 
 def handle_generate_title(payload: Dict[str, Any], request) -> jsonify:
@@ -1547,14 +1828,14 @@ def handle_rewrite_news(payload: Dict[str, Any], request) -> jsonify:
             "News rewritten (fallback mode)!",
             rewrittenNews=fallback_news
         ))
-
+    
 def handle_save_caption(payload: Dict[str, Any], request) -> jsonify:
     """Handle manual caption saving"""
     caption = payload.get('manualCaption', '').strip()
     if not caption:
         return jsonify(error_response("Caption is required"))
     
-    logger.info(f"Caption saved: {caption[:50]}...")
+    logger.info("Caption saved: {caption[:50]}...")
     return jsonify(success_response("Caption saved successfully!"))
 
 def handle_save_rewrite(payload: Dict[str, Any], request) -> jsonify:
@@ -1615,7 +1896,7 @@ def check_image_status(image_id):
         status = image_data.get('status')
         if status == 'finished' and image_data.get('image_url'):
             return jsonify(success_response(
-                "Image processing completed",
+                "Image processing complted",
                 status="finished",
                 imageUrl=image_data['image_url']
             ))
@@ -2257,7 +2538,8 @@ HTML_TEMPLATE = """
                 { key: 'feed_1', label: 'Feed - Modelo 1', icon: '🖼️' },
                 { key: 'feed_2', label: 'Feed - Modelo 2', icon: '🔴' },
                 { key: 'feed_3', label: 'Feed - Modelo 3', icon: '⚪' },
-                { key: 'feed_4', label: 'Feed - Modelo 4', icon: '⚫' }
+                { key: 'feed_4', label: 'Feed - Modelo 4', icon: '⚫' },
+                { key: 'feed_capa_jornal', label: 'Capa de Jornal', icon: '📰' }
             ],
             stories: [
                 { key: 'stories_1', label: 'Stories - Modelo 1', icon: '📱' },
@@ -2395,37 +2677,50 @@ HTML_TEMPLATE = """
 }
 
         // Template selection
-        function selectTemplate(templateKey) {
-            document.querySelectorAll('.template-item').forEach(item => item.classList.remove('selected'));
-            
-            if (event && event.target) {
-                event.target.closest('.template-item').classList.add('selected');
-            } else {
-                const templateElement = document.querySelector(`[onclick="selectTemplate('${templateKey}')"]`);
-                if (templateElement) {
-                    templateElement.classList.add('selected');
-                }
-            }
-            
-            selectedTemplate = templateKey;
-            updateFieldsForTemplate(templateKey);
+        // Template selection - atualizada para Capa de Jornal
+function selectTemplate(templateKey) {
+    document.querySelectorAll('.template-item').forEach(item => item.classList.remove('selected'));
+    
+    if (event && event.target) {
+        event.target.closest('.template-item').classList.add('selected');
+    } else {
+        const templateElement = document.querySelector(`[onclick="selectTemplate('${templateKey}')"]`);
+        if (templateElement) {
+            templateElement.classList.add('selected');
         }
-        
-        function updateFieldsForTemplate(templateKey) {
-            const assuntoGroup = document.getElementById('assunto-group');
-            const creditosGroup = document.getElementById('creditos-group');
-            
-            if (templateKey.includes('feed')) {
-                assuntoGroup.style.display = 'block';
-                creditosGroup.style.display = 'block';
-            } else if (templateKey.includes('reels')) {
-                assuntoGroup.style.display = 'none';
-                creditosGroup.style.display = 'none';
-            } else {
-                assuntoGroup.style.display = 'none';
-                creditosGroup.style.display = 'none';
-            }
-        }
+    }
+    
+    selectedTemplate = templateKey;
+    updateFieldsForTemplate(templateKey);
+}
+
+function updateFieldsForTemplate(templateKey) {
+    const tituloGroup = document.getElementById('titulo-group');
+    const assuntoGroup = document.getElementById('assunto-group');
+    const creditosGroup = document.getElementById('creditos-group');
+    
+    // NOVO: Capa de Jornal não precisa de nenhum campo
+    if (templateKey === 'feed_capa_jornal') {
+        tituloGroup.style.display = 'none';
+        assuntoGroup.style.display = 'none';
+        creditosGroup.style.display = 'none';
+    } else if (templateKey.includes('feed')) {
+        // Feed normal: mostra todos
+        tituloGroup.style.display = 'block';
+        assuntoGroup.style.display = 'block';
+        creditosGroup.style.display = 'block';
+    } else if (templateKey.includes('reels')) {
+        // Reels: só título
+        tituloGroup.style.display = 'block';
+        assuntoGroup.style.display = 'none';
+        creditosGroup.style.display = 'none';
+    } else {
+        // Stories: só título
+        tituloGroup.style.display = 'block';
+        assuntoGroup.style.display = 'none';
+        creditosGroup.style.display = 'none';
+    }
+}
 
         // API call helper
         async function sendToAPI(action, data, file = null) {
@@ -2490,25 +2785,27 @@ HTML_TEMPLATE = """
 
         // Generate post
         async function generatePost() {
-            if (!uploadedFiles.post) {
-                showError('Por favor, faça upload de um arquivo primeiro.', 'post');
-                return;
-            }
-            
-            const titulo = document.getElementById('titulo').value.trim();
-            const assunto = document.getElementById('assunto').value.trim();
-            const creditos = document.getElementById('creditos').value.trim();
-            
-            // Validate required fields based on template
-if (selectedTemplate.includes('feed') && (!titulo || !assunto || !creditos)) {
-    showError('Para templates de Feed, título, assunto e créditos são obrigatórios.', 'post');
-    return;
-}
-
-if (selectedTemplate.includes('reels') && !titulo) {
-    showError('Para templates de Reels, o título é obrigatório.', 'post');
-    return;
-}
+    if (!uploadedFiles.post) {
+        showError('Por favor, faça upload de um arquivo primeiro.', 'post');
+        return;
+    }
+    
+    const titulo = document.getElementById('titulo').value.trim();
+    const assunto = document.getElementById('assunto').value.trim();
+    const creditos = document.getElementById('creditos').value.trim();
+    
+    // NOVO: Capa de Jornal não precisa de validação
+    if (selectedTemplate === 'feed_capa_jornal') {
+        // Não valida nada, apenas continua
+    } else if (selectedTemplate.includes('feed') && (!titulo || !assunto || !creditos)) {
+        // Feed normal: valida todos os campos
+        showError('Para templates de Feed, título, assunto e créditos são obrigatórios.', 'post');
+        return;
+    } else if (selectedTemplate.includes('reels') && !titulo) {
+        // Reels: valida só título
+        showError('Para templates de Reels, o título é obrigatório.', 'post');
+        return;
+    }
 
 // Watermark não exige título - permite vazio
 
@@ -2834,3 +3131,4 @@ if __name__ == '__main__':
     
     logger.info("🌐 Server running on: http://0.0.0.0:5000")
     app.run(debug=True, host='0.0.0.0', port=5000)
+    
