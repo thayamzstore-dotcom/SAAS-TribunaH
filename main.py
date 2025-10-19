@@ -626,7 +626,7 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
             logger.info(f"Vídeo original carregado: {clip.w}x{clip.h}, duração: {clip.duration}s")
             logger.info(f"Proporção do vídeo original: {clip.w/clip.h:.3f}")
             # Limita duração máxima para evitar timeouts e consumo excessivo de memória
-    MAX_DURATION = 60  # segundos
+    MAX_DURATION = 120  # segundos
     if clip.duration > MAX_DURATION:
         logger.warning(f"⚠️ Vídeo muito longo ({clip.duration:.1f}s), cortando para {MAX_DURATION}s")
         clip = clip.subclip(0, MAX_DURATION)
