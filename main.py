@@ -625,6 +625,13 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
             clip = mpe.VideoFileClip(source_media_path)
             logger.info(f"Vídeo original carregado: {clip.w}x{clip.h}, duração: {clip.duration}s")
             logger.info(f"Proporção do vídeo original: {clip.w/clip.h:.3f}")
+            # Limita duração máxima para evitar timeouts e consumo excessivo de memória
+    MAX_DURATION = 60  # segundos
+    if clip.duration > MAX_DURATION:
+        logger.warning(f"⚠️ Vídeo muito longo ({clip.duration:.1f}s), cortando para {MAX_DURATION}s")
+        clip = clip.subclip(0, MAX_DURATION)
+        logger.info(f"✂️ Vídeo cortado para {MAX_DURATION}s")
+        
         except Exception as e:
             logger.error(f"Erro específico ao carregar vídeo: {type(e).__name__}: {e}")
             logger.info("Convertendo imagem para vídeo")
