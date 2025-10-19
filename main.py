@@ -799,10 +799,11 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
                 fps=min(max(fps, 24), 60),
                 codec='libx264',
                 audio_codec='aac',
-                threads=2,
-                preset='medium',
+                threads=4,
+                preset='ultrafast',
                 verbose=False,
                 logger=None
+                bitrate='2000k'
             )
             logger.info("Exportação concluída!")
         except Exception as e:
@@ -3149,5 +3150,11 @@ if __name__ == '__main__':
         logger.info(f"   - {template['name']}: {template['uuid']}")
     
     logger.info("🌐 Server running on: http://0.0.0.0:5000")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    
+    # Aumenta timeout para processar vídeos longos
+    import socket
+    socket.setdefaulttimeout(600)  # 10 minutos
+    logger.info("⏱️ Timeout configurado: 600 segundos")
+    
+    app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)
     
