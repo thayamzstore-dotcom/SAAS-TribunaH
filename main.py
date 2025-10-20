@@ -859,7 +859,7 @@ def generate_local_capa_jornal(source_media_path: str) -> Optional[Tuple[str, st
             
             # AJUSTE: Área MAIOR para a imagem ocupar mais espaço
             # Diminuí as margens para a imagem ficar maior
-            target_x = 58          
+            target_x = 43          
             target_y = 45           
             target_width = 880      
             target_height = 1330    
@@ -3151,4 +3151,4 @@ if __name__ == '__main__':
     
     logger.info("🌐 Server running on: http://0.0.0.0:5000")
     app.run(debug=True, host='0.0.0.0', port=5000)
-    
+
