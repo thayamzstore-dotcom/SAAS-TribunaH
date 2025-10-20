@@ -15,8 +15,6 @@ from typing import Dict, Any, Optional, Tuple
 import logging
 from PIL import Image, ImageDraw, ImageFont
 
-
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -37,7 +35,7 @@ class Config:
     ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'mp4', 'mov'}
 
 try:
-    # MoviePy é opcional; usado para vídeo/Reels
+    # MoviePy is optional; used for extracting frames from videos for reels
     import moviepy.editor as mpe
     logger.info("MoviePy importado com sucesso!")
 except ImportError as e:
@@ -45,9 +43,9 @@ except ImportError as e:
     mpe = None
 except Exception as e:
     logger.error(f"Erro ao importar MoviePy: {type(e).__name__}: {e}")
+    import traceback
     logger.error(f"Traceback: {traceback.format_exc()}")
     mpe = None
-
 
 # Templates configuration
 PLACID_TEMPLATES = {
@@ -627,13 +625,6 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
             clip = mpe.VideoFileClip(source_media_path)
             logger.info(f"Vídeo original carregado: {clip.w}x{clip.h}, duração: {clip.duration}s")
             logger.info(f"Proporção do vídeo original: {clip.w/clip.h:.3f}")
-            # Limita duração máxima para evitar timeouts e consumo excessivo de memória
-    MAX_DURATION = 120  # segundos
-    if clip.duration > MAX_DURATION:
-        logger.warning(f"⚠️ Vídeo muito longo ({clip.duration:.1f}s), cortando para {MAX_DURATION}s")
-        clip = clip.subclip(0, MAX_DURATION)
-        logger.info(f"✂️ Vídeo cortado para {MAX_DURATION}s")
-        
         except Exception as e:
             logger.error(f"Erro específico ao carregar vídeo: {type(e).__name__}: {e}")
             logger.info("Convertendo imagem para vídeo")
@@ -808,11 +799,10 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
                 fps=min(max(fps, 24), 60),
                 codec='libx264',
                 audio_codec='aac',
-                threads=4,
-                preset='ultrafast',
+                threads=2,
+                preset='medium',
                 verbose=False,
-                logger=None,
-                bitrate='2000k'
+                logger=None
             )
             logger.info("Exportação concluída!")
         except Exception as e:
@@ -846,7 +836,6 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
 def generate_local_capa_jornal(source_media_path: str) -> Optional[Tuple[str, str]]:
     """
     Gera uma imagem de capa de jornal sobrepondo a foto do usuário no template.
-    Mantém proporção original da imagem sem distorcer.
     Returns (filepath, public_url) or None.
     """
     try:
@@ -868,42 +857,44 @@ def generate_local_capa_jornal(source_media_path: str) -> Optional[Tuple[str, st
         with Image.open(source_media_path) as user_img:
             user_img = user_img.convert('RGB')
             
-            # Área onde a imagem será colocada
-            target_x = 58
-            target_y = 45
-            target_width = 880
-            target_height = 1330
+            # AJUSTE: Área MAIOR para a imagem ocupar mais espaço
+            # Diminuí as margens para a imagem ficar maior
+            target_x = 58          
+            target_y = 45           
+            target_width = 880      
+            target_height = 1330    
             
-            # ===== NOVO: Redimensionamento SEM DISTORÇÃO =====
-            # Calcula proporção da imagem original
-            original_ratio = user_img.width / user_img.height
+            # Calcula proporção para cobrir toda a área (crop inteligente)
+            img_ratio = user_img.width / user_img.height
             target_ratio = target_width / target_height
             
-            # Redimensiona mantendo proporção (cabe dentro da área)
-            if original_ratio > target_ratio:
-                # Imagem mais larga: ajusta pela largura
-                new_width = target_width
-                new_height = int(target_width / original_ratio)
-            else:
-                # Imagem mais alta: ajusta pela altura
+            if img_ratio > target_ratio:
+                # Imagem mais larga: ajusta pela altura
                 new_height = target_height
-                new_width = int(target_height * original_ratio)
+                new_width = int(new_height * img_ratio)
+            else:
+                # Imagem mais alta: ajusta pela largura
+                new_width = target_width
+                new_height = int(new_width / img_ratio)
             
-            # Redimensiona com alta qualidade
+            # Redimensiona mantendo proporção
             user_img_resized = user_img.resize((new_width, new_height), Image.LANCZOS)
             
-            # Centraliza a imagem na área disponível
-            paste_x = target_x + (target_width - new_width) // 2
-            paste_y = target_y + (target_height - new_height) // 2
+            # Corta o centro da imagem para caber exatamente na área
+            left = (new_width - target_width) // 2
+            top = (new_height - target_height) // 2
+            right = left + target_width
+            bottom = top + target_height
+            user_img_cropped = user_img_resized.crop((left, top, right, bottom))
             
-            # Cola a imagem centralizada
-            background.paste(user_img_resized, (paste_x, paste_y))
+            # Cola a imagem do usuário sobre o template
+            background.paste(user_img_cropped, (target_x, target_y))
         
-        # Salva o resultado com alta qualidade
-        out_filename = generate_filename("feed_capa_jornal", "jpg")
+        # Salva o resultado
+        out_filename = generate_filename("feed_capa_jornal", "png")
         out_path = os.path.join(Config.UPLOAD_FOLDER, out_filename)
         ensure_upload_directory()
-        background.save(out_path, format="JPEG", quality=95, optimize=True)
+        background.save(out_path, format="PNG", quality=95)
         
         public_url = f"{request.url_root}uploads/{out_filename}"
         logger.info(f"Capa de jornal gerada: {public_url}")
@@ -3159,11 +3150,5 @@ if __name__ == '__main__':
         logger.info(f"   - {template['name']}: {template['uuid']}")
     
     logger.info("🌐 Server running on: http://0.0.0.0:5000")
-    
-    # Aumenta timeout para processar vídeos longos
-    import socket
-    socket.setdefaulttimeout(600)  # 10 minutos
-    logger.info("⏱️ Timeout configurado: 600 segundos")
-    
-    app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)
+    app.run(debug=True, host='0.0.0.0', port=5000)
     
