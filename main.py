@@ -15,6 +15,8 @@ from typing import Dict, Any, Optional, Tuple
 import logging
 from PIL import Image, ImageDraw, ImageFont
 
+
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -35,7 +37,7 @@ class Config:
     ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'mp4', 'mov'}
 
 try:
-    # MoviePy is optional; used for extracting frames from videos for reels
+    # MoviePy é opcional; usado para vídeo/Reels
     import moviepy.editor as mpe
     logger.info("MoviePy importado com sucesso!")
 except ImportError as e:
@@ -43,9 +45,9 @@ except ImportError as e:
     mpe = None
 except Exception as e:
     logger.error(f"Erro ao importar MoviePy: {type(e).__name__}: {e}")
-    import traceback
     logger.error(f"Traceback: {traceback.format_exc()}")
     mpe = None
+
 
 # Templates configuration
 PLACID_TEMPLATES = {
@@ -809,7 +811,7 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
                 threads=4,
                 preset='ultrafast',
                 verbose=False,
-                logger=None
+                logger=None,
                 bitrate='2000k'
             )
             logger.info("Exportação concluída!")
