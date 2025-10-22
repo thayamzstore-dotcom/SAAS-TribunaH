@@ -2323,8 +2323,8 @@ HTML_TEMPLATE = """
 <body>
     <div class="container">
         <div class="header">
-            <h1>TRIBUNA HOJE APLICATIVO</h1>
-            <p>Ferramenta Completa Criação de Conteúdo Instagram</p>
+            <h1>PosTH APP - TRIBUNA HOJE</h1>
+            <p>Ferramenta Completa Criação de Conteúdo no Instagram</p>
         </div>
 
         <div class="tabs-container">
