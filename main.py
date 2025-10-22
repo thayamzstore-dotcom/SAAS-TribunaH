@@ -858,45 +858,38 @@ def generate_local_capa_jornal(source_media_path: str) -> Optional[Tuple[str, st
             user_width, user_height = user_img.size
             logger.info(f"Imagem do usuário: {user_width}x{user_height}")
             
-            # Define a área de destino no template
-            target_x = 60
-            target_y = 25
-            target_width = 700
-            target_height = 1200
+            # ✨ ÁREA MAIOR - ajuste estes valores para aumentar/diminuir ✨
+            target_x = 30           # Posição horizontal (menor = mais à esquerda)
+            target_y = 12           # Posição vertical (menor = mais acima)
+            max_width = 970         # Largura máxima (AUMENTE para imagem maior)
+            max_height = 1300       # Altura máxima (AUMENTE para imagem maior)
             
             # Calcula a proporção da imagem do usuário
             user_aspect = user_width / user_height
-            target_aspect = target_width / target_height
             
-            logger.info(f"Proporção usuário: {user_aspect:.3f}, Proporção alvo: {target_aspect:.3f}")
+            logger.info(f"Proporção da imagem: {user_aspect:.3f}")
             
-            # Redimensiona mantendo a proporção e cobrindo toda a área
-            if user_aspect > target_aspect:
-                # Imagem mais larga - ajusta pela altura
-                new_height = target_height
-                new_width = int(new_height * user_aspect)
+            # ✅ Redimensiona para CABER na área (FIT, não FILL)
+            # Isso garante que NADA seja cortado!
+            if user_width / max_width > user_height / max_height:
+                # Imagem limitada pela LARGURA
+                new_width = max_width
+                new_height = int(max_width / user_aspect)
             else:
-                # Imagem mais alta - ajusta pela largura
-                new_width = target_width
-                new_height = int(new_width / user_aspect)
+                # Imagem limitada pela ALTURA
+                new_height = max_height
+                new_width = int(max_height * user_aspect)
             
-            logger.info(f"Redimensionando para: {new_width}x{new_height}")
+            logger.info(f"Redimensionando para: {new_width}x{new_height} (SEM CORTE)")
             user_img_resized = user_img.resize((new_width, new_height), Image.LANCZOS)
             
-            # Centraliza a imagem na área de destino (crop se necessário)
-            if new_width > target_width or new_height > target_height:
-                # Calcula posição para centralizar o crop
-                left = (new_width - target_width) // 2
-                top = (new_height - target_height) // 2
-                right = left + target_width
-                bottom = top + target_height
-                
-                user_img_resized = user_img_resized.crop((left, top, right, bottom))
-                logger.info(f"Imagem cortada para centralizar: {target_width}x{target_height}")
+            # ✅ Centraliza a imagem na área disponível (sem cortar!)
+            final_x = target_x + (max_width - new_width) // 2
+            final_y = target_y + (max_height - new_height) // 2
             
             # Cola a imagem do usuário no template
-            background.paste(user_img_resized, (target_x, target_y))
-            logger.info(f"Imagem colada na posição: ({target_x}, {target_y})")
+            background.paste(user_img_resized, (final_x, final_y))
+            logger.info(f"Imagem colada COMPLETA na posição: ({final_x}, {final_y})")
         
         # Salva o resultado
         out_filename = generate_filename("feed_capa_jornal", "png")
@@ -3159,4 +3152,5 @@ if __name__ == '__main__':
     
     logger.info("🌐 Server running on: http://0.0.0.0:5000")
     app.run(debug=True, host='0.0.0.0', port=5000)
+
 
