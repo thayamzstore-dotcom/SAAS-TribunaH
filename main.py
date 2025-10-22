@@ -861,7 +861,7 @@ def generate_local_capa_jornal(source_media_path: str) -> Optional[Tuple[str, st
             # Define a área de destino no template
             target_x = 37
             target_y = 25
-            target_width = 880
+            target_width = 700
             target_height = 1400
             
             # Calcula a proporção da imagem do usuário
