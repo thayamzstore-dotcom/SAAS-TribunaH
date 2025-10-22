@@ -839,7 +839,6 @@ def generate_local_capa_jornal(source_media_path: str) -> Optional[Tuple[str, st
     Returns (filepath, public_url) or None.
     """
     try:
-        # Carrega o template de fundo
         template_bg_path = os.path.join(os.path.dirname(__file__), "template_capa_jornal.jpg")
         
         if not os.path.exists(template_bg_path):
@@ -848,7 +847,7 @@ def generate_local_capa_jornal(source_media_path: str) -> Optional[Tuple[str, st
         
         logger.info(f"Carregando template de capa: {template_bg_path}")
         
-        # Abre o template
+        # Carrega o template de fundo
         background = Image.open(template_bg_path).convert('RGB')
         bg_width, bg_height = background.size
         logger.info(f"Template carregado: {bg_width}x{bg_height}")
@@ -856,39 +855,48 @@ def generate_local_capa_jornal(source_media_path: str) -> Optional[Tuple[str, st
         # Carrega a imagem do usuário
         with Image.open(source_media_path) as user_img:
             user_img = user_img.convert('RGB')
+            user_width, user_height = user_img.size
+            logger.info(f"Imagem do usuário: {user_width}x{user_height}")
             
-            # AJUSTE: Área MAIOR para a imagem ocupar mais espaço
-            # Diminuí as margens para a imagem ficar maior
-            target_x = 43          
-            target_y = 45           
-            target_width = 880      
-            target_height = 1330    
+            # Define a área de destino no template
+            target_x = 170
+            target_y = 50
+            target_width = 650
+            target_height = 1170
             
-            # Calcula proporção para cobrir toda a área (crop inteligente)
-            img_ratio = user_img.width / user_img.height
-            target_ratio = target_width / target_height
+            # Calcula a proporção da imagem do usuário
+            user_aspect = user_width / user_height
+            target_aspect = target_width / target_height
             
-            if img_ratio > target_ratio:
-                # Imagem mais larga: ajusta pela altura
+            logger.info(f"Proporção usuário: {user_aspect:.3f}, Proporção alvo: {target_aspect:.3f}")
+            
+            # Redimensiona mantendo a proporção e cobrindo toda a área
+            if user_aspect > target_aspect:
+                # Imagem mais larga - ajusta pela altura
                 new_height = target_height
-                new_width = int(new_height * img_ratio)
+                new_width = int(new_height * user_aspect)
             else:
-                # Imagem mais alta: ajusta pela largura
+                # Imagem mais alta - ajusta pela largura
                 new_width = target_width
-                new_height = int(new_width / img_ratio)
+                new_height = int(new_width / user_aspect)
             
-            # Redimensiona mantendo proporção
+            logger.info(f"Redimensionando para: {new_width}x{new_height}")
             user_img_resized = user_img.resize((new_width, new_height), Image.LANCZOS)
             
-            # Corta o centro da imagem para caber exatamente na área
-            left = (new_width - target_width) // 2
-            top = (new_height - target_height) // 2
-            right = left + target_width
-            bottom = top + target_height
-            user_img_cropped = user_img_resized.crop((left, top, right, bottom))
+            # Centraliza a imagem na área de destino (crop se necessário)
+            if new_width > target_width or new_height > target_height:
+                # Calcula posição para centralizar o crop
+                left = (new_width - target_width) // 2
+                top = (new_height - target_height) // 2
+                right = left + target_width
+                bottom = top + target_height
+                
+                user_img_resized = user_img_resized.crop((left, top, right, bottom))
+                logger.info(f"Imagem cortada para centralizar: {target_width}x{target_height}")
             
-            # Cola a imagem do usuário sobre o template
-            background.paste(user_img_cropped, (target_x, target_y))
+            # Cola a imagem do usuário no template
+            background.paste(user_img_resized, (target_x, target_y))
+            logger.info(f"Imagem colada na posição: ({target_x}, {target_y})")
         
         # Salva o resultado
         out_filename = generate_filename("feed_capa_jornal", "png")
