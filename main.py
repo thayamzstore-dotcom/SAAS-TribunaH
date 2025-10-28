@@ -1,3 +1,4 @@
+    
 # Fix para compatibilidade Pillow 10+ com MoviePy
 import PIL.Image
 if not hasattr(PIL.Image, 'ANTIALIAS'):
@@ -583,12 +584,75 @@ def _wrap_text(text: str, font: ImageFont.ImageFont, max_width: int) -> list:
         lines.append(' '.join(current_line))
     
     return lines
-
+def convert_video_if_needed(input_path: str) -> str:
+    """
+    Converte vídeos em formatos problemáticos (HEVC, MOV Apple) para MP4 H.264
+    Retorna o caminho do vídeo convertido ou o original se não precisar converter
+    """
+    if mpe is None:
+        logger.warning("MoviePy não disponível, pulando conversão")
+        return input_path
+    
+    try:
+        # Detecta se precisa converter
+        needs_conversion = False
+        
+        # Verifica extensão
+        ext = os.path.splitext(input_path)[1].lower()
+        if ext in ['.mov', '.hevc', '.3gp']:
+            needs_conversion = True
+            logger.info(f"🔄 Arquivo {ext} detectado, precisa converter")
+        
+        # Tenta carregar o vídeo
+        try:
+            test_clip = mpe.VideoFileClip(input_path)
+            codec = getattr(test_clip, 'codec', 'unknown')
+            if 'hevc' in str(codec).lower() or 'h265' in str(codec).lower():
+                needs_conversion = True
+                logger.info(f"🔄 Codec {codec} detectado, precisa converter")
+            test_clip.close()
+        except Exception as e:
+            logger.warning(f"⚠️ Erro ao verificar codec: {e}, tentando conversão")
+            needs_conversion = True
+        
+        # Se não precisa converter, retorna o original
+        if not needs_conversion:
+            logger.info("✅ Vídeo já está em formato compatível")
+            return input_path
+        
+        # Converte o vídeo
+        logger.info("🔄 Convertendo vídeo para MP4 H.264...")
+        converted_filename = generate_filename("converted", "mp4")
+        converted_path = os.path.join(Config.UPLOAD_FOLDER, converted_filename)
+        
+        clip = mpe.VideoFileClip(input_path)
+        
+        # Exporta com configurações compatíveis
+        clip.write_videofile(
+            converted_path,
+            codec='libx264',
+            audio_codec='aac',
+            preset='medium',
+            fps=30,
+            bitrate='2000k',
+            verbose=False,
+            logger=None
+        )
+        
+        clip.close()
+        
+        logger.info(f"✅ Vídeo convertido: {converted_path}")
+        return converted_path
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao converter vídeo: {e}")
+        # Se falhar, retorna o original e deixa o MoviePy tentar processar
+        return input_path
+        
 def generate_local_reels_video(source_media_path: str, title_text: str, template_key: str) -> Optional[Tuple[str, str]]:
     """
-    Gera um vídeo de reels usando template de fundo "template1".
-    Compõe: fundo fixo + vídeo centralizado + título superior.
-    O vídeo agora preenche toda a largura do template.
+    Gera um vídeo de reels usando template de fundo.
+    OTIMIZADO PARA VÍDEOS DE ATÉ 10 MINUTOS E FORMATOS MOBILE
     Returns (filepath, public_url) or None.
     """
     if mpe is None:
@@ -596,7 +660,12 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
         logger.error("Tente: pip install moviepy imageio imageio-ffmpeg")
         return None
     
-    # Teste de componentes MoviePy
+    logger.info("Iniciando geração de Reels...")
+    logger.info(f"Arquivo de entrada: {source_media_path}")
+    
+    # NOVO: Converte vídeos mobile se necessário
+    source_media_path = convert_video_if_needed(source_media_path)
+    
     logger.info("Testando importações do MoviePy...")
     try:
         from moviepy.editor import VideoFileClip, ImageClip, ColorClip, CompositeVideoClip, TextClip
@@ -799,8 +868,8 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
                 fps=min(max(fps, 24), 60),
                 codec='libx264',
                 audio_codec='aac',
-                threads=2,
-                preset='medium',
+                threads=8,
+                preset='veryfast',
                 verbose=False,
                 logger=None
             )
@@ -1137,8 +1206,8 @@ def generate_local_capa_jornal(source_media_path: str) -> Optional[Tuple[str, st
                 fps=min(max(fps, 24), 60),
                 codec='libx264',
                 audio_codec='aac',
-                threads=2,
-                preset='medium',
+                threads=4,
+                preset='veryfast',
                 verbose=False,
                 logger=None
             )
@@ -3151,4 +3220,20 @@ if __name__ == '__main__':
         logger.info(f"   - {template['name']}: {template['uuid']}")
     
     logger.info("🌐 Server running on: http://0.0.0.0:5000")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    
+    # AUMENTA TIMEOUT PARA VÍDEOS LONGOS (10 MINUTOS)
+    import socket
+    socket.setdefaulttimeout(900)  # 15 minutos (margem de segurança)
+    logger.info("⏱️ Timeout configurado: 900 segundos (15 min)")
+    
+    # CONFIGURAÇÃO OTIMIZADA PARA PRODUÇÃO
+    from werkzeug.serving import WSGIRequestHandler
+    WSGIRequestHandler.protocol_version = "HTTP/1.1"
+    
+    app.run(
+        debug=False,  # ← Desabilita debug em produção
+        host='0.0.0.0',
+        port=5000,
+        threaded=True,
+        request_handler=WSGIRequestHandler
+    )
