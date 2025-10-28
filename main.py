@@ -32,7 +32,7 @@ class Config:
     OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
     UPLOAD_FOLDER = os.path.abspath('uploads')
     MAX_FILE_SIZE = 700 * 1024 * 1024  # 700MB
-    ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'mp4', 'mov'}
+    ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'mp4', 'mov', 'avi', 'mkv', 'webm', '3gp', 'hevc'}
 
 try:
     # MoviePy is optional; used for extracting frames from videos for reels
