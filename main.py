@@ -2568,11 +2568,13 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>PosTH APP - TRIBUNA HOJE</h1>
-            <p>Ferramenta Completa Criação de Conteúdo no Instagram</p>
-        </div>
+    <div class="header">
+    <h1>PosTH APP - TRIBUNA HOJE</h1>
+    <p>Ferramenta Completa Criação de Conteúdo no Instagram</p>
+    <a href="/logout" style="color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 10px 20px; border-radius: 5px; margin-top: 15px; display: inline-block;">
+        🔒 Sair
+    </a>
+</div>
 
         <div class="tabs-container">
             <div class="tabs-nav">
