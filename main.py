@@ -1586,7 +1586,33 @@ def error_response(message: str, **kwargs) -> Dict[str, Any]:
     return response
 
 # Route handlers
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Página de login com senha"""
+    if request.method == 'POST':
+        password = request.form.get('password', '')
+        if password == APP_PASSWORD:
+            session['logged_in'] = True
+            logger.info("✅ Login bem-sucedido!")
+            return redirect(url_for('index'))
+        else:
+            logger.warning("❌ Tentativa de login falhou!")
+            return render_template_string(LOGIN_TEMPLATE, error=True)
+    
+    if session.get('logged_in'):
+        return redirect(url_for('index'))
+    
+    return render_template_string(LOGIN_TEMPLATE, error=False)
+
+@app.route('/logout')
+def logout():
+    """Logout do sistema"""
+    session.pop('logged_in', None)
+    logger.info("🔒 Usuário deslogado")
+    return redirect(url_for('login'))
+
 @app.route('/')
+@login_required  # ← ADICIONE ESTA LINHA
 def index():
     return render_template_string(HTML_TEMPLATE)
 
@@ -2018,6 +2044,145 @@ def check_image_status(image_id):
         return jsonify(error_response("Error checking image status")), 500
 
 # HTML Template
+# Template de Login
+LOGIN_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Tribuna Hoje</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #c3161f 0%, #8b0000 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .login-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 50px;
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+        }
+        
+        .logo { font-size: 4rem; margin-bottom: 20px; }
+        
+        .login-container h1 {
+            color: #c3161f;
+            margin-bottom: 10px;
+            font-size: 2rem;
+        }
+        
+        .login-container p {
+            color: #6c757d;
+            margin-bottom: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 25px;
+            text-align: left;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #2c3e50;
+            font-weight: 600;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+        }
+        
+        .form-group input:focus {
+            outline: none;
+            border-color: #c3161f;
+        }
+        
+        .btn-login {
+            width: 100%;
+            padding: 15px;
+            background: #c3161f;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.2rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-login:hover {
+            background: #8b0000;
+            transform: translateY(-2px);
+        }
+        
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .footer {
+            margin-top: 30px;
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="logo">🔐</div>
+        <h1>TRIBUNA HOJE</h1>
+        <p>App Automação Instagram</p>
+        
+        {% if error %}
+        <div class="error-message">
+            ❌ Senha incorreta! Tente novamente.
+        </div>
+        {% endif %}
+        
+        <form method="POST" action="/login">
+            <div class="form-group">
+                <label for="password">Senha de Acesso</label>
+                <input 
+                    type="password" 
+                    id="password" 
+                    name="password" 
+                    placeholder="Digite a senha" 
+                    required 
+                    autofocus
+                >
+            </div>
+            
+            <button type="submit" class="btn-login">
+                Entrar 🚀
+            </button>
+        </form>
+        
+        <div class="footer">
+            © 2025 Tribuna Hoje
+        </div>
+    </div>
+</body>
+</html>
+"""
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="pt-BR">
