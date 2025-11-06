@@ -24,6 +24,18 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 
+# ✅ CONFIGURAÇÃO DE SENHA E SEGURANÇA
+app.secret_key = 'tribuna-hoje-secret-key-2025-mudar-isso-em-producao'
+APP_PASSWORD = 'tribunahoje2025'  # ⚠️ MUDE ESTA SENHA!
+
+# Decorator para proteger rotas
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('logged_in'):
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 import os
 # Configuration
