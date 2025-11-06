@@ -26,7 +26,7 @@ CORS(app)
 
 # ✅ CONFIGURAÇÃO DE SENHA E SEGURANÇA
 app.secret_key = 'tribuna-hoje-secret-key-2025-mudar-isso-em-producao'
-APP_PASSWORD = 'tribunahoje2025'  # ⚠️ MUDE ESTA SENHA!
+APP_PASSWORD = 'tribunahj2025'  # ⚠️ MUDE ESTA SENHA!
 
 # Decorator para proteger rotas
 def login_required(f):
