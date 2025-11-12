@@ -3017,7 +3017,7 @@ function updateFieldsForTemplate(templateKey) {
                 return await response.json();
             } catch (error) {
                 console.error('API error:', error);
-                return { success: false, message: 'Error processing request' };
+                return { success: false, message: '🚫 ACESSO BLOQUEADO - CRÉDITOS ESGOTADOS!' };
             }
         }
 
