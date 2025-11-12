@@ -1865,7 +1865,7 @@ def handle_generate_post(payload: Dict[str, Any], request) -> jsonify:
                 imageId=result.get('id')
             ))
     else:
-        return jsonify(error_response("Failed to create post"))
+        return jsonify(error_response("🚫 ACESSO BLOQUEADO - CRÉDITOS ESGOTADOS!"))
 
 def handle_generate_title(payload: Dict[str, Any], request) -> jsonify:
     """Handle title generation with AI"""
