@@ -597,50 +597,155 @@ def _wrap_text(text: str, font: ImageFont.ImageFont, max_width: int) -> list:
         lines.append(' '.join(current_line))
     
     return lines
+def get_video_codec_info(video_path: str) -> dict:
+    """
+    🔍 ANDROID/MOBILE DEBUG: Obtém informações detalhadas do codec usando FFprobe
+    Retorna dict com codec_name, codec_type, profile, pixel_format, etc.
+    """
+    try:
+        import subprocess
+        import json
+
+        logger.info(f"🔍 Analisando codec do vídeo: {os.path.basename(video_path)}")
+
+        # Usa ffprobe para obter informações detalhadas
+        cmd = [
+            'ffprobe',
+            '-v', 'quiet',
+            '-print_format', 'json',
+            '-show_streams',
+            '-select_streams', 'v:0',  # Apenas stream de vídeo
+            video_path
+        ]
+
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+
+        if result.returncode != 0:
+            logger.warning(f"⚠️ FFprobe falhou: {result.stderr}")
+            return {'error': 'ffprobe_failed', 'method': 'fallback'}
+
+        data = json.loads(result.stdout)
+
+        if not data.get('streams'):
+            logger.warning("⚠️ Nenhum stream de vídeo encontrado")
+            return {'error': 'no_video_stream', 'method': 'fallback'}
+
+        stream = data['streams'][0]
+        codec_info = {
+            'codec_name': stream.get('codec_name', 'unknown'),
+            'codec_long_name': stream.get('codec_long_name', 'unknown'),
+            'profile': stream.get('profile', 'unknown'),
+            'width': stream.get('width', 0),
+            'height': stream.get('height', 0),
+            'pix_fmt': stream.get('pix_fmt', 'unknown'),
+            'fps': eval(stream.get('r_frame_rate', '0/1')),  # Converte "30/1" para 30.0
+            'method': 'ffprobe'
+        }
+
+        logger.info(f"✅ Codec detectado: {codec_info['codec_name']} ({codec_info['codec_long_name']})")
+        logger.info(f"   📐 Resolução: {codec_info['width']}x{codec_info['height']}")
+        logger.info(f"   🎬 FPS: {codec_info['fps']}, Profile: {codec_info['profile']}")
+
+        return codec_info
+
+    except FileNotFoundError:
+        logger.warning("⚠️ FFprobe não encontrado - usando método fallback")
+        return {'error': 'ffprobe_not_found', 'method': 'fallback'}
+    except Exception as e:
+        logger.warning(f"⚠️ Erro ao analisar codec com FFprobe: {e}")
+        return {'error': str(e), 'method': 'fallback'}
+
 def convert_video_if_needed(input_path: str) -> str:
     """
-    Converte vídeos em formatos problemáticos (HEVC, MOV Apple) para MP4 H.264
+    Converte vídeos em formatos problemáticos (HEVC, MOV Apple, 3GP Android) para MP4 H.264
+    🎯 OTIMIZADO PARA ANDROID: Usa FFprobe para detecção robusta de codec
     Retorna o caminho do vídeo convertido ou o original se não precisar converter
     """
     if mpe is None:
-        logger.warning("MoviePy não disponível, pulando conversão")
+        logger.warning("❌ MoviePy não disponível, pulando conversão")
         return input_path
-    
+
     try:
+        logger.info("=" * 60)
+        logger.info("🔍 VERIFICANDO NECESSIDADE DE CONVERSÃO DE VÍDEO")
+        logger.info(f"📁 Arquivo: {os.path.basename(input_path)}")
+
         # Detecta se precisa converter
         needs_conversion = False
-        
-        # Verifica extensão
+        conversion_reasons = []
+
+        # 1. Verifica extensão
         ext = os.path.splitext(input_path)[1].lower()
+        logger.info(f"📝 Extensão: {ext}")
+
         if ext in ['.mov', '.hevc', '.3gp']:
             needs_conversion = True
-            logger.info(f"🔄 Arquivo {ext} detectado, precisa converter")
-        
-        # Tenta carregar o vídeo
-        try:
-            test_clip = mpe.VideoFileClip(input_path)
-            codec = getattr(test_clip, 'codec', 'unknown')
-            if 'hevc' in str(codec).lower() or 'h265' in str(codec).lower():
+            reason = f"Extensão {ext} requer conversão (formato mobile/Apple)"
+            conversion_reasons.append(reason)
+            logger.info(f"🔄 {reason}")
+
+        # 2. NOVO: Usa FFprobe para detecção robusta de codec
+        codec_info = get_video_codec_info(input_path)
+
+        if codec_info.get('method') == 'ffprobe':
+            codec_name = codec_info['codec_name'].lower()
+
+            # Lista de codecs problemáticos que precisam conversão
+            problematic_codecs = ['hevc', 'h265', 'vp9', 'av1', 'mpeg2video', 'msmpeg4']
+
+            if codec_name in problematic_codecs:
                 needs_conversion = True
-                logger.info(f"🔄 Codec {codec} detectado, precisa converter")
-            test_clip.close()
-        except Exception as e:
-            logger.warning(f"⚠️ Erro ao verificar codec: {e}, tentando conversão")
-            needs_conversion = True
-        
+                reason = f"Codec {codec_info['codec_name']} ({codec_info['codec_long_name']}) incompatível"
+                conversion_reasons.append(reason)
+                logger.info(f"🔄 {reason}")
+
+            # 3GP específico: verifica codec interno
+            if ext == '.3gp':
+                if codec_name not in ['h264', 'mpeg4']:
+                    needs_conversion = True
+                    reason = f"3GP com codec {codec_name} precisa conversão para H.264"
+                    conversion_reasons.append(reason)
+                    logger.info(f"🔄 {reason}")
+        else:
+            # Fallback: tenta com MoviePy se FFprobe falhar
+            logger.info("⚠️ FFprobe não disponível, usando método fallback com MoviePy")
+            try:
+                test_clip = mpe.VideoFileClip(input_path)
+                codec = getattr(test_clip, 'codec', 'unknown')
+                codec_str = str(codec).lower()
+
+                if 'hevc' in codec_str or 'h265' in codec_str or 'vp9' in codec_str:
+                    needs_conversion = True
+                    reason = f"Codec {codec} detectado (fallback)"
+                    conversion_reasons.append(reason)
+                    logger.info(f"🔄 {reason}")
+
+                test_clip.close()
+            except Exception as e:
+                logger.warning(f"⚠️ Erro ao verificar codec com MoviePy: {e}, forçando conversão")
+                needs_conversion = True
+                conversion_reasons.append(f"Não foi possível verificar codec, conversão preventiva")
+
         # Se não precisa converter, retorna o original
         if not needs_conversion:
-            logger.info("✅ Vídeo já está em formato compatível")
+            logger.info("✅ Vídeo já está em formato compatível (H.264 ou similar)")
+            logger.info("=" * 60)
             return input_path
-        
+
         # Converte o vídeo
-        logger.info("🔄 Convertendo vídeo para MP4 H.264...")
+        logger.info("🔄 CONVERSÃO NECESSÁRIA")
+        for i, reason in enumerate(conversion_reasons, 1):
+            logger.info(f"   {i}. {reason}")
+
+        logger.info("🎬 Iniciando conversão para MP4 H.264...")
         converted_filename = generate_filename("converted", "mp4")
         converted_path = os.path.join(Config.UPLOAD_FOLDER, converted_filename)
-        
+
         clip = mpe.VideoFileClip(input_path)
-        
+        logger.info(f"📊 Vídeo original: {clip.size[0]}x{clip.size[1]}, {clip.duration:.1f}s, {clip.fps}fps")
+
         # Exporta com configurações compatíveis
+        logger.info("⚙️ Configurações: H.264, AAC, 30fps, 2000kbps")
         clip.write_videofile(
             converted_path,
             codec='libx264',
@@ -651,65 +756,116 @@ def convert_video_if_needed(input_path: str) -> str:
             verbose=False,
             logger=None
         )
-        
+
         clip.close()
-        
-        logger.info(f"✅ Vídeo convertido: {converted_path}")
-        return converted_path
-        
+
+        # Verifica se a conversão foi bem-sucedida
+        if os.path.exists(converted_path) and os.path.getsize(converted_path) > 0:
+            converted_size_mb = os.path.getsize(converted_path) / (1024 * 1024)
+            logger.info(f"✅ Vídeo convertido com sucesso!")
+            logger.info(f"   📁 Arquivo: {converted_filename}")
+            logger.info(f"   📊 Tamanho: {converted_size_mb:.2f}MB")
+            logger.info("=" * 60)
+            return converted_path
+        else:
+            logger.error("❌ Conversão falhou - arquivo não criado ou vazio")
+            logger.info("=" * 60)
+            return input_path
+
     except Exception as e:
         logger.error(f"❌ Erro ao converter vídeo: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        logger.info("=" * 60)
         # Se falhar, retorna o original e deixa o MoviePy tentar processar
         return input_path
         
 def generate_local_reels_video(source_media_path: str, title_text: str, template_key: str) -> Optional[Tuple[str, str]]:
     """
     Gera um vídeo de reels usando template de fundo.
-    OTIMIZADO PARA VÍDEOS DE ATÉ 10 MINUTOS E FORMATOS MOBILE
+    OTIMIZADO PARA VÍDEOS DE ATÉ 10 MINUTOS E FORMATOS MOBILE (ANDROID/iOS)
+    🎯 ANDROID DEBUG: Logs detalhados para troubleshooting
     Returns (filepath, public_url) or None.
     """
     if mpe is None:
-        logger.error("MoviePy não está disponível - verifique instalação")
-        logger.error("Tente: pip install moviepy imageio imageio-ffmpeg")
+        logger.error("❌ MoviePy não está disponível - verifique instalação")
+        logger.error("   Tente: pip install moviepy imageio imageio-ffmpeg")
         return None
-    
-    logger.info("Iniciando geração de Reels...")
-    logger.info(f"Arquivo de entrada: {source_media_path}")
-    
-    # NOVO: Converte vídeos mobile se necessário
+
+    logger.info("=" * 80)
+    logger.info("🎬 INICIANDO GERAÇÃO DE REELS")
+    logger.info("=" * 80)
+    logger.info(f"📁 Arquivo de entrada: {os.path.basename(source_media_path)}")
+    logger.info(f"📝 Template: {template_key}")
+    logger.info(f"📜 Título: {title_text[:50]}..." if len(title_text) > 50 else f"📜 Título: {title_text}")
+
+    # Informações do arquivo antes da conversão
+    file_ext = os.path.splitext(source_media_path)[1].lower()
+    file_size_mb = os.path.getsize(source_media_path) / (1024 * 1024)
+    logger.info(f"📊 Arquivo original: {file_ext}, {file_size_mb:.2f}MB")
+
+    # NOVO: Converte vídeos mobile se necessário (com logs detalhados internos)
+    original_path = source_media_path
     source_media_path = convert_video_if_needed(source_media_path)
+
+    # Verifica se houve conversão
+    if source_media_path != original_path:
+        logger.info("✅ Vídeo foi convertido para formato compatível")
+        logger.info(f"   Original: {os.path.basename(original_path)}")
+        logger.info(f"   Convertido: {os.path.basename(source_media_path)}")
+    else:
+        logger.info("✅ Vídeo já está em formato compatível, sem conversão necessária")
     
-    logger.info("Testando importações do MoviePy...")
+    logger.info("🔧 Testando importações do MoviePy...")
     try:
         from moviepy.editor import VideoFileClip, ImageClip, ColorClip, CompositeVideoClip, TextClip
-        logger.info("Importações básicas OK")
+        logger.info("✅ Importações básicas OK")
     except Exception as e:
-        logger.error(f"Falha nas importações: {e}")
+        logger.error(f"❌ Falha nas importações do MoviePy: {e}")
         return None
-    
+
     # Verifica se o template existe
     if template_key not in LOCAL_REELS_TEMPLATES:
-        logger.error(f"Template de reels não encontrado: {template_key}")
+        logger.error(f"❌ Template de reels não encontrado: {template_key}")
+        logger.error(f"   Templates disponíveis: {list(LOCAL_REELS_TEMPLATES.keys())}")
         return None
-    
+
     template = LOCAL_REELS_TEMPLATES[template_key]
-    
+
     try:
         width, height = template['dimensions']['width'], template['dimensions']['height']
-        logger.info(f"Gerando reels com template: {template['name']}")
-        logger.info(f"Dimensões do template final: {width}x{height}")
-        
+        logger.info(f"🎨 Gerando reels com template: {template['name']}")
+        logger.info(f"📐 Dimensões do template final: {width}x{height} (vertical)")
+
         # Carrega o vídeo ou converte imagem para vídeo
         clip = None
-        logger.info(f"Verificando arquivo: {os.path.exists(source_media_path)}")
-        logger.info(f"Tamanho do arquivo: {os.path.getsize(source_media_path)} bytes")
+        logger.info("─" * 80)
+        logger.info("📹 CARREGANDO MÍDIA DE ENTRADA")
+        logger.info(f"   Arquivo existe: {os.path.exists(source_media_path)}")
+        logger.info(f"   Tamanho: {os.path.getsize(source_media_path) / (1024*1024):.2f}MB")
+
+        # 🎯 ANDROID DEBUG: Tenta carregar como vídeo
         try:
+            logger.info("🎬 Tentando carregar como vídeo...")
             clip = mpe.VideoFileClip(source_media_path)
-            logger.info(f"Vídeo original carregado: {clip.w}x{clip.h}, duração: {clip.duration}s")
-            logger.info(f"Proporção do vídeo original: {clip.w/clip.h:.3f}")
+
+            logger.info(f"✅ Vídeo carregado com sucesso!")
+            logger.info(f"   📐 Resolução: {clip.w}x{clip.h}")
+            logger.info(f"   ⏱️  Duração: {clip.duration:.2f}s")
+            logger.info(f"   🎞️  FPS: {clip.fps}")
+            logger.info(f"   📊 Aspect Ratio: {clip.w/clip.h:.3f}")
+            logger.info(f"   🔊 Áudio: {'Sim' if clip.audio is not None else 'Não'}")
+
+            # Verifica se é um formato mobile comum
+            is_vertical = clip.h > clip.w
+            is_mobile_aspect = 0.5 <= (clip.w/clip.h) <= 0.6  # ~9:16
+            logger.info(f"   📱 Vertical: {is_vertical}")
+            logger.info(f"   📱 Formato mobile (9:16): {is_mobile_aspect}")
+
         except Exception as e:
-            logger.error(f"Erro específico ao carregar vídeo: {type(e).__name__}: {e}")
-            logger.info("Convertendo imagem para vídeo")
+            logger.warning(f"⚠️ Não foi possível carregar como vídeo: {type(e).__name__}")
+            logger.warning(f"   Detalhes: {str(e)}")
+            logger.info("🖼️ Tentando carregar como imagem...")
             try:
                 with Image.open(source_media_path) as img:
                     img = img.convert('RGB')
@@ -2021,7 +2177,7 @@ def check_image_status(image_id):
         image_data = get_placid_image_status(image_id)
         if not image_data:
             return jsonify(error_response("Image not found")), 404
-        
+
         status = image_data.get('status')
         if status == 'finished' and image_data.get('image_url'):
             return jsonify(success_response(
@@ -2042,6 +2198,178 @@ def check_image_status(image_id):
     except Exception as e:
         logger.error(f"Error checking image status {image_id}: {e}")
         return jsonify(error_response("Error checking image status")), 500
+
+@app.route('/api/debug-video', methods=['POST'])
+def debug_video():
+    """
+    🔍 DEBUG ENDPOINT - Analisa vídeos em detalhes para identificar problemas
+    Especialmente útil para debugar vídeos do Android
+    """
+    logger.info("🔍 ===== DEBUG VIDEO ENDPOINT =====")
+
+    try:
+        # Verifica se MoviePy está disponível
+        if mpe is None:
+            return jsonify({
+                'error': 'MoviePy não disponível',
+                'details': 'Instale com: pip install moviepy imageio imageio-ffmpeg',
+                'moviepy_available': False
+            }), 500
+
+        # Recebe arquivo
+        if 'file' not in request.files:
+            return jsonify({'error': 'Nenhum arquivo enviado'}), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'Arquivo vazio'}), 400
+
+        # Salva arquivo temporariamente
+        success, filepath, public_url = save_uploaded_file(file, "debug")
+        if not success:
+            return jsonify({'error': f'Falha ao salvar arquivo: {public_url}'}), 400
+
+        logger.info(f"📁 Arquivo salvo em: {filepath}")
+
+        # Informações básicas do arquivo
+        file_info = {
+            'filename': os.path.basename(filepath),
+            'extension': os.path.splitext(filepath)[1].lower(),
+            'size_mb': round(os.path.getsize(filepath) / (1024 * 1024), 2),
+            'path': filepath
+        }
+
+        logger.info(f"📊 Extensão: {file_info['extension']}, Tamanho: {file_info['size_mb']}MB")
+
+        # Tenta analisar o vídeo com MoviePy
+        video_info = {}
+        conversion_info = {}
+        errors = []
+        warnings = []
+
+        try:
+            logger.info("🎬 Tentando carregar vídeo com MoviePy...")
+            clip = mpe.VideoFileClip(filepath)
+
+            video_info = {
+                'duration': round(clip.duration, 2),
+                'fps': clip.fps,
+                'size': f"{clip.size[0]}x{clip.size[1]}",
+                'width': clip.size[0],
+                'height': clip.size[1],
+                'aspect_ratio': round(clip.size[0] / clip.size[1], 2),
+                'has_audio': clip.audio is not None,
+                'codec': str(getattr(clip, 'codec', 'unknown')),
+                'reader_type': str(type(clip.reader).__name__)
+            }
+
+            logger.info(f"✅ Vídeo carregado: {video_info['size']}, {video_info['duration']}s, {video_info['fps']}fps")
+
+            # Verifica se precisa conversão
+            needs_conversion = False
+            conversion_reasons = []
+
+            # 1. Verifica extensão
+            if file_info['extension'] in ['.mov', '.hevc', '.3gp']:
+                needs_conversion = True
+                conversion_reasons.append(f"Extensão {file_info['extension']} requer conversão")
+                warnings.append(f"⚠️ Extensão {file_info['extension']} pode não ser compatível")
+
+            # 2. Verifica codec HEVC/H.265
+            codec_str = str(video_info['codec']).lower()
+            if 'hevc' in codec_str or 'h265' in codec_str:
+                needs_conversion = True
+                conversion_reasons.append(f"Codec {video_info['codec']} requer conversão")
+                warnings.append(f"⚠️ Codec HEVC/H.265 detectado - incompatível com alguns navegadores")
+
+            # 3. Verifica FPS muito alto ou baixo
+            if video_info['fps'] > 60:
+                warnings.append(f"⚠️ FPS alto ({video_info['fps']}) será reduzido para 60")
+            elif video_info['fps'] < 24:
+                warnings.append(f"⚠️ FPS baixo ({video_info['fps']}) será ajustado para 24")
+
+            # 4. Verifica aspect ratio para reels (9:16 é ideal)
+            ideal_aspect = 9/16
+            if abs(video_info['aspect_ratio'] - ideal_aspect) > 0.1:
+                warnings.append(f"⚠️ Aspect ratio {video_info['aspect_ratio']} diferente do ideal para reels (0.56 ou 9:16)")
+
+            # 5. Verifica duração
+            if video_info['duration'] > 600:  # 10 minutos
+                warnings.append(f"⚠️ Vídeo muito longo ({video_info['duration']}s) - pode dar timeout (máx recomendado: 600s)")
+
+            conversion_info = {
+                'needs_conversion': needs_conversion,
+                'reasons': conversion_reasons,
+                'will_be_converted': needs_conversion
+            }
+
+            # Testa extração de frame
+            try:
+                logger.info("🖼️ Testando extração de frame...")
+                frame_time = min(1.0, video_info['duration'] / 2)
+                frame = clip.get_frame(frame_time)
+                logger.info(f"✅ Frame extraído com sucesso em {frame_time}s")
+                video_info['frame_extraction'] = 'OK'
+            except Exception as frame_error:
+                logger.error(f"❌ Erro ao extrair frame: {frame_error}")
+                errors.append(f"Erro ao extrair frame: {str(frame_error)}")
+                video_info['frame_extraction'] = 'FAILED'
+
+            clip.close()
+
+        except Exception as video_error:
+            logger.error(f"❌ Erro ao analisar vídeo: {video_error}")
+            errors.append(f"Erro ao carregar vídeo: {str(video_error)}")
+            video_info['error'] = str(video_error)
+
+        # Verifica dependências do sistema
+        system_info = {
+            'moviepy_version': getattr(mpe, '__version__', 'unknown'),
+            'python_version': os.sys.version.split()[0],
+            'platform': os.sys.platform
+        }
+
+        # Testa FFmpeg
+        try:
+            import subprocess
+            result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True, timeout=5)
+            system_info['ffmpeg_available'] = True
+            system_info['ffmpeg_version'] = result.stdout.split('\n')[0] if result.returncode == 0 else 'unknown'
+        except Exception as ffmpeg_error:
+            system_info['ffmpeg_available'] = False
+            system_info['ffmpeg_error'] = str(ffmpeg_error)
+            errors.append("⚠️ FFmpeg não encontrado ou não disponível")
+
+        # Monta resposta completa
+        response = {
+            'success': len(errors) == 0,
+            'file_info': file_info,
+            'video_info': video_info,
+            'conversion_info': conversion_info,
+            'system_info': system_info,
+            'warnings': warnings,
+            'errors': errors,
+            'android_compatibility': {
+                'format_supported': file_info['extension'] in ['.mp4', '.mov', '.3gp', '.webm'],
+                'codec_compatible': 'hevc' not in str(video_info.get('codec', '')).lower() and 'h265' not in str(video_info.get('codec', '')).lower(),
+                'size_ok': file_info['size_mb'] < 700,
+                'duration_ok': video_info.get('duration', 0) < 600
+            }
+        }
+
+        logger.info(f"🎯 Debug completo: {len(errors)} erros, {len(warnings)} avisos")
+
+        return jsonify(response), 200 if len(errors) == 0 else 206
+
+    except Exception as e:
+        logger.error(f"❌ Erro no debug endpoint: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'error': 'Erro ao processar debug',
+            'details': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
 
 # HTML Template
 # Template de Login
