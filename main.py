@@ -1772,6 +1772,15 @@ def logout():
 def index():
     return render_template_string(HTML_TEMPLATE)
 
+@app.route('/test-debug')
+def test_debug():
+    """Serve test debug page for Android videos"""
+    try:
+        with open('test_debug.html', 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        return "❌ Arquivo test_debug.html não encontrado", 404
+
 @app.route('/test-placid')
 def test_placid():
     """Test Placid API connection"""
@@ -1784,12 +1793,12 @@ def test_placid():
         },
         'create_now': True
     }
-    
+
     result = create_placid_image(
-        test_payload['template_uuid'], 
+        test_payload['template_uuid'],
         test_payload['layers']
     )
-    
+
     if result:
         return f"✅ Placid funcionando! ID: {result.get('id', 'N/A')}"
     else:

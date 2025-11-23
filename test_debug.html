@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔍 Test Debug Android Video</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2rem;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1rem;
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            background: #f8f9ff;
+            margin-bottom: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f0f2ff;
+        }
+
+        .upload-area.dragover {
+            border-color: #764ba2;
+            background: #e8ebff;
+            transform: scale(1.02);
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .upload-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+        }
+
+        .upload-text {
+            font-size: 1.2rem;
+            color: #667eea;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .upload-hint {
+            color: #999;
+            font-size: 0.9rem;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.3s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .result {
+            display: none;
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 10px;
+            background: #f8f9fa;
+        }
+
+        .result.show {
+            display: block;
+        }
+
+        .result.success {
+            background: #d4edda;
+            border: 2px solid #28a745;
+        }
+
+        .result.warning {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+        }
+
+        .result.error {
+            background: #f8d7da;
+            border: 2px solid #dc3545;
+        }
+
+        .result h2 {
+            margin-bottom: 15px;
+            font-size: 1.5rem;
+        }
+
+        .result-section {
+            background: white;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .result-section h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+
+        .result-item {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .result-item:last-child {
+            border-bottom: none;
+        }
+
+        .result-label {
+            font-weight: bold;
+            color: #555;
+            display: inline-block;
+            min-width: 150px;
+        }
+
+        .result-value {
+            color: #333;
+        }
+
+        .warning-item, .error-item {
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            background: white;
+        }
+
+        .warning-item {
+            border-left: 4px solid #ffc107;
+        }
+
+        .error-item {
+            border-left: 4px solid #dc3545;
+        }
+
+        .compatibility-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .compatibility-item {
+            padding: 10px;
+            border-radius: 5px;
+            background: white;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .compatibility-item.ok {
+            border-left: 4px solid #28a745;
+        }
+
+        .compatibility-item.fail {
+            border-left: 4px solid #dc3545;
+        }
+
+        .icon-ok::before {
+            content: "✅";
+            font-size: 1.2rem;
+        }
+
+        .icon-fail::before {
+            content: "❌";
+            font-size: 1.2rem;
+        }
+
+        .file-info {
+            margin-top: 15px;
+            padding: 15px;
+            background: #e8f4f8;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .file-info.show {
+            display: block;
+        }
+
+        .file-name {
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .file-size {
+            color: #666;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Test Debug - Vídeo Android</h1>
+        <p class="subtitle">Teste vídeos do Android para verificar compatibilidade</p>
+
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">📹</div>
+            <div class="upload-text">Clique aqui ou arraste um vídeo</div>
+            <div class="upload-hint">Formatos suportados: MP4, MOV, 3GP, WEBM, AVI, MKV</div>
+            <input type="file" id="fileInput" accept="video/*">
+        </div>
+
+        <div class="file-info" id="fileInfo">
+            <div class="file-name" id="fileName"></div>
+            <div class="file-size" id="fileSize"></div>
+        </div>
+
+        <button class="btn" id="testBtn" disabled>Testar Vídeo</button>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <div>Analisando vídeo... Aguarde...</div>
+        </div>
+
+        <div class="result" id="result">
+            <!-- Resultado será inserido aqui via JavaScript -->
+        </div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const testBtn = document.getElementById('testBtn');
+        const loading = document.getElementById('loading');
+        const result = document.getElementById('result');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const fileSize = document.getElementById('fileSize');
+
+        let selectedFile = null;
+
+        // Click para selecionar arquivo
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // Drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+
+            if (e.dataTransfer.files.length > 0) {
+                fileInput.files = e.dataTransfer.files;
+                handleFileSelect(e.dataTransfer.files[0]);
+            }
+        });
+
+        // Arquivo selecionado
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+
+        function handleFileSelect(file) {
+            selectedFile = file;
+
+            // Mostra informações do arquivo
+            fileName.textContent = `📁 ${file.name}`;
+            const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+            fileSize.textContent = `📊 Tamanho: ${sizeMB} MB`;
+            fileInfo.classList.add('show');
+
+            // Habilita botão
+            testBtn.disabled = false;
+
+            // Esconde resultado anterior
+            result.classList.remove('show');
+        }
+
+        // Testar vídeo
+        testBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            // Mostra loading
+            loading.classList.add('show');
+            result.classList.remove('show');
+            testBtn.disabled = true;
+
+            // Prepara FormData
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            try {
+                // Faz requisição
+                const response = await fetch('/api/debug-video', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                // Esconde loading
+                loading.classList.remove('show');
+                testBtn.disabled = false;
+
+                // Mostra resultado
+                displayResult(data);
+
+            } catch (error) {
+                loading.classList.remove('show');
+                testBtn.disabled = false;
+
+                result.className = 'result show error';
+                result.innerHTML = `
+                    <h2>❌ Erro ao testar vídeo</h2>
+                    <div class="error-item">
+                        <strong>Erro:</strong> ${error.message}
+                        <br><br>
+                        <strong>Certifique-se que:</strong>
+                        <ul style="margin-top: 10px; margin-left: 20px;">
+                            <li>O servidor está rodando (python main.py)</li>
+                            <li>Você está acessando o arquivo correto</li>
+                            <li>A porta 5000 está disponível</li>
+                        </ul>
+                    </div>
+                `;
+            }
+        });
+
+        function displayResult(data) {
+            const isSuccess = data.success && (!data.warnings || data.warnings.length === 0);
+            const hasWarnings = data.warnings && data.warnings.length > 0;
+            const hasErrors = data.errors && data.errors.length > 0;
+
+            let resultClass = 'result show ';
+            if (hasErrors) resultClass += 'error';
+            else if (hasWarnings) resultClass += 'warning';
+            else resultClass += 'success';
+
+            result.className = resultClass;
+
+            let html = `<h2>${isSuccess ? '✅' : hasWarnings ? '⚠️' : '❌'} Resultado do Teste</h2>`;
+
+            // Informações do arquivo
+            if (data.file_info) {
+                html += `
+                    <div class="result-section">
+                        <h3>📁 Informações do Arquivo</h3>
+                        <div class="result-item">
+                            <span class="result-label">Nome:</span>
+                            <span class="result-value">${data.file_info.filename}</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">Extensão:</span>
+                            <span class="result-value">${data.file_info.extension}</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">Tamanho:</span>
+                            <span class="result-value">${data.file_info.size_mb} MB</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Informações do vídeo
+            if (data.video_info && !data.video_info.error) {
+                html += `
+                    <div class="result-section">
+                        <h3>🎬 Informações do Vídeo</h3>
+                        <div class="result-item">
+                            <span class="result-label">Resolução:</span>
+                            <span class="result-value">${data.video_info.size}</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">Duração:</span>
+                            <span class="result-value">${data.video_info.duration}s</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">FPS:</span>
+                            <span class="result-value">${data.video_info.fps}</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">Aspect Ratio:</span>
+                            <span class="result-value">${data.video_info.aspect_ratio}</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">Áudio:</span>
+                            <span class="result-value">${data.video_info.has_audio ? 'Sim ✅' : 'Não ❌'}</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">Codec:</span>
+                            <span class="result-value">${data.video_info.codec}</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Conversão
+            if (data.conversion_info) {
+                const needsConv = data.conversion_info.needs_conversion;
+                html += `
+                    <div class="result-section">
+                        <h3>🔄 Necessidade de Conversão</h3>
+                        <div class="result-item">
+                            <span class="result-label">Precisa converter:</span>
+                            <span class="result-value"><strong>${needsConv ? 'SIM ⚠️' : 'NÃO ✅'}</strong></span>
+                        </div>
+                        ${needsConv && data.conversion_info.reasons ? `
+                            <div style="margin-top: 10px;">
+                                <strong>Motivos:</strong>
+                                ${data.conversion_info.reasons.map(r => `
+                                    <div class="warning-item" style="margin-top: 5px;">⚠️ ${r}</div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+
+            // Compatibilidade Android
+            if (data.android_compatibility) {
+                const compat = data.android_compatibility;
+                html += `
+                    <div class="result-section">
+                        <h3>📱 Compatibilidade Android</h3>
+                        <div class="compatibility-grid">
+                            <div class="compatibility-item ${compat.format_supported ? 'ok' : 'fail'}">
+                                <span class="${compat.format_supported ? 'icon-ok' : 'icon-fail'}"></span>
+                                <span>Formato suportado</span>
+                            </div>
+                            <div class="compatibility-item ${compat.codec_compatible ? 'ok' : 'fail'}">
+                                <span class="${compat.codec_compatible ? 'icon-ok' : 'icon-fail'}"></span>
+                                <span>Codec compatível</span>
+                            </div>
+                            <div class="compatibility-item ${compat.size_ok ? 'ok' : 'fail'}">
+                                <span class="${compat.size_ok ? 'icon-ok' : 'icon-fail'}"></span>
+                                <span>Tamanho OK (&lt;700MB)</span>
+                            </div>
+                            <div class="compatibility-item ${compat.duration_ok ? 'ok' : 'fail'}">
+                                <span class="${compat.duration_ok ? 'icon-ok' : 'icon-fail'}"></span>
+                                <span>Duração OK (&lt;10min)</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Avisos
+            if (hasWarnings) {
+                html += `
+                    <div class="result-section">
+                        <h3>⚠️ Avisos</h3>
+                        ${data.warnings.map(w => `<div class="warning-item">${w}</div>`).join('')}
+                    </div>
+                `;
+            }
+
+            // Erros
+            if (hasErrors) {
+                html += `
+                    <div class="result-section">
+                        <h3>❌ Erros</h3>
+                        ${data.errors.map(e => `<div class="error-item">${e}</div>`).join('')}
+                    </div>
+                `;
+            }
+
+            // Conclusão
+            html += `
+                <div class="result-section" style="border-left-color: ${isSuccess ? '#28a745' : hasWarnings ? '#ffc107' : '#dc3545'};">
+                    <h3>📋 Conclusão</h3>
+                    <div style="font-size: 1.1rem; padding: 10px;">
+                        ${isSuccess ?
+                            '<strong style="color: #28a745;">✅ Vídeo totalmente compatível!</strong><br>Deve funcionar perfeitamente no template de reels.' :
+                            hasWarnings && !hasErrors ?
+                            '<strong style="color: #ffc107;">⚠️ Vídeo funcional com ressalvas</strong><br>O sistema converterá automaticamente para formato compatível.' :
+                            '<strong style="color: #dc3545;">❌ Vídeo com problemas</strong><br>Verifique os erros acima e tente outro arquivo.'
+                        }
+                    </div>
+                </div>
+            `;
+
+            result.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
