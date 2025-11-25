@@ -1,4 +1,7 @@
-    
+import gc  # ← ADICIONE NO TOPO DO ARQUIVO (junto com outros imports)
+import tempfile
+import shutil
+
 # Fix para compatibilidade Pillow 10+ com MoviePy
 import PIL.Image
 if not hasattr(PIL.Image, 'ANTIALIAS'):
@@ -661,7 +664,59 @@ def convert_video_if_needed(input_path: str) -> str:
         logger.error(f"❌ Erro ao converter vídeo: {e}")
         # Se falhar, retorna o original e deixa o MoviePy tentar processar
         return input_path
-        
+
+
+def cleanup_temp_files(*file_paths):
+    """
+    Remove arquivos temporários com tratamento robusto de erros
+    """
+    for filepath in file_paths:
+        if filepath and os.path.exists(filepath):
+            try:
+                # Tenta remover múltiplas vezes se necessário
+                max_attempts = 3
+                for attempt in range(max_attempts):
+                    try:
+                        os.remove(filepath)
+                        logger.info(f"🗑️ Arquivo removido: {filepath}")
+                        break
+                    except PermissionError:
+                        if attempt < max_attempts - 1:
+                            time.sleep(0.5)  # Aguarda 500ms e tenta novamente
+                        else:
+                            logger.warning(f"⚠️ Não foi possível remover {filepath} (em uso)")
+                    except Exception as e:
+                        logger.warning(f"⚠️ Erro ao remover {filepath}: {e}")
+                        break
+            except Exception as e:
+                logger.warning(f"⚠️ Erro geral ao limpar {filepath}: {e}")
+
+def force_close_clips(*clips):
+    """
+    Força fechamento de clips do MoviePy com múltiplas tentativas
+    """
+    for clip in clips:
+        if clip is not None:
+            try:
+                # Tenta fechar áudio primeiro
+                if hasattr(clip, 'audio') and clip.audio is not None:
+                    try:
+                        clip.audio.close()
+                    except Exception:
+                        pass
+                
+                # Fecha o clip principal
+                clip.close()
+                
+                # Remove referência
+                del clip
+                
+            except Exception as e:
+                logger.warning(f"⚠️ Erro ao fechar clip: {e}")
+    
+    # Força coleta de lixo
+    gc.collect()
+    
 def generate_local_reels_video(source_media_path: str, title_text: str, template_key: str) -> Optional[Tuple[str, str]]:
     """
     Gera um vídeo de reels usando template de fundo.
