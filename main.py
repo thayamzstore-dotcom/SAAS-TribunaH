@@ -600,70 +600,88 @@ def _wrap_text(text: str, font: ImageFont.ImageFont, max_width: int) -> list:
         lines.append(' '.join(current_line))
     
     return lines
-def convert_video_if_needed(input_path: str) -> str:
+
+
+def convert_video_if_needed(input_path: str) -> tuple:
     """
-    Converte vídeos em formatos problemáticos (HEVC, MOV Apple) para MP4 H.264
-    Retorna o caminho do vídeo convertido ou o original se não precisar converter
+    Converte vídeos em formatos problemáticos para MP4 H.264
+    Retorna (caminho_convertido, precisa_limpar)
     """
     if mpe is None:
         logger.warning("MoviePy não disponível, pulando conversão")
-        return input_path
+        return input_path, False
+    
+    needs_conversion = False
+    needs_cleanup = False
     
     try:
-        # Detecta se precisa converter
-        needs_conversion = False
-        
         # Verifica extensão
         ext = os.path.splitext(input_path)[1].lower()
-        if ext in ['.mov', '.hevc', '.3gp']:
+        if ext in ['.mov', '.hevc', '.3gp', '.avi', '.mkv']:
             needs_conversion = True
             logger.info(f"🔄 Arquivo {ext} detectado, precisa converter")
         
-        # Tenta carregar o vídeo
-        try:
-            test_clip = mpe.VideoFileClip(input_path)
-            codec = getattr(test_clip, 'codec', 'unknown')
-            if 'hevc' in str(codec).lower() or 'h265' in str(codec).lower():
+        # Tenta carregar o vídeo para verificar codec
+        if not needs_conversion:
+            try:
+                test_clip = mpe.VideoFileClip(input_path)
+                codec = getattr(test_clip, 'codec', 'unknown')
+                
+                # Verifica se é HEVC/H265
+                if codec and ('hevc' in str(codec).lower() or 'h265' in str(codec).lower()):
+                    needs_conversion = True
+                    logger.info(f"🔄 Codec {codec} detectado, precisa converter")
+                
+                test_clip.close()
+                del test_clip
+                gc.collect()
+                
+            except Exception as e:
+                logger.warning(f"⚠️ Erro ao verificar codec: {e}, tentando conversão")
                 needs_conversion = True
-                logger.info(f"🔄 Codec {codec} detectado, precisa converter")
-            test_clip.close()
-        except Exception as e:
-            logger.warning(f"⚠️ Erro ao verificar codec: {e}, tentando conversão")
-            needs_conversion = True
         
         # Se não precisa converter, retorna o original
         if not needs_conversion:
             logger.info("✅ Vídeo já está em formato compatível")
-            return input_path
+            return input_path, False
         
         # Converte o vídeo
         logger.info("🔄 Convertendo vídeo para MP4 H.264...")
         converted_filename = generate_filename("converted", "mp4")
         converted_path = os.path.join(Config.UPLOAD_FOLDER, converted_filename)
         
-        clip = mpe.VideoFileClip(input_path)
-        
-        # Exporta com configurações compatíveis
-        clip.write_videofile(
-            converted_path,
-            codec='libx264',
-            audio_codec='aac',
-            preset='medium',
-            fps=30,
-            bitrate='2000k',
-            verbose=False,
-            logger=None
-        )
-        
-        clip.close()
-        
-        logger.info(f"✅ Vídeo convertido: {converted_path}")
-        return converted_path
+        clip = None
+        try:
+            clip = mpe.VideoFileClip(input_path)
+            
+            # Configurações otimizadas de conversão
+            clip.write_videofile(
+                converted_path,
+                codec='libx264',
+                audio_codec='aac',
+                preset='fast',  # Mudado de 'medium' para 'fast'
+                fps=min(clip.fps if clip.fps else 30, 30),
+                bitrate='2000k',
+                audio_bitrate='128k',
+                verbose=False,
+                logger=None,
+                threads=4
+            )
+            
+            logger.info(f"✅ Vídeo convertido: {converted_path}")
+            return converted_path, True  # Precisa limpar depois
+            
+        finally:
+            if clip:
+                force_close_clips(clip)
         
     except Exception as e:
-        logger.error(f"❌ Erro ao converter vídeo: {e}")
-        # Se falhar, retorna o original e deixa o MoviePy tentar processar
-        return input_path
+        logger.error(f"❌ Erro crítico ao converter vídeo: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        # Se falhar, retorna o original
+        return input_path, False
+
 
 
 def cleanup_temp_files(*file_paths):
@@ -719,113 +737,126 @@ def force_close_clips(*clips):
     
 def generate_local_reels_video(source_media_path: str, title_text: str, template_key: str) -> Optional[Tuple[str, str]]:
     """
-    Gera um vídeo de reels usando template de fundo.
-    OTIMIZADO PARA VÍDEOS DE ATÉ 10 MINUTOS E FORMATOS MOBILE
-    Returns (filepath, public_url) or None.
+    Gera um vídeo de reels com tratamento robusto de erros
+    VERSÃO CORRIGIDA - Resolve erros intermitentes
     """
     if mpe is None:
-        logger.error("MoviePy não está disponível - verifique instalação")
-        logger.error("Tente: pip install moviepy imageio imageio-ffmpeg")
+        logger.error("❌ MoviePy não está disponível")
         return None
     
-    logger.info("Iniciando geração de Reels...")
-    logger.info(f"Arquivo de entrada: {source_media_path}")
+    # Verifica templates ANTES de começar
+    missing_templates = verify_template_files()
+    if missing_templates:
+        logger.error(f"❌ Templates faltando: {missing_templates}")
+        return None
     
-    # NOVO: Converte vídeos mobile se necessário
-    source_media_path = convert_video_if_needed(source_media_path)
+    logger.info("=" * 60)
+    logger.info("🎬 Iniciando geração de Reels...")
+    logger.info(f"📁 Arquivo: {source_media_path}")
+    logger.info(f"🎨 Template: {template_key}")
+    logger.info(f"📝 Título: {title_text}")
     
-    logger.info("Testando importações do MoviePy...")
+    # Variáveis para cleanup
+    converted_path = None
+    needs_cleanup_converted = False
+    title_overlay_path = None
+    clip = None
+    resized_clip = None
+    bg = None
+    title_clip = None
+    composed = None
+    
     try:
-        from moviepy.editor import VideoFileClip, ImageClip, ColorClip, CompositeVideoClip, TextClip
-        logger.info("Importações básicas OK")
-    except Exception as e:
-        logger.error(f"Falha nas importações: {e}")
-        return None
-    
-    # Verifica se o template existe
-    if template_key not in LOCAL_REELS_TEMPLATES:
-        logger.error(f"Template de reels não encontrado: {template_key}")
-        return None
-    
-    template = LOCAL_REELS_TEMPLATES[template_key]
-    
-    try:
-        width, height = template['dimensions']['width'], template['dimensions']['height']
-        logger.info(f"Gerando reels com template: {template['name']}")
-        logger.info(f"Dimensões do template final: {width}x{height}")
+        # Teste de importações
+        from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip
         
-        # Carrega o vídeo ou converte imagem para vídeo
-        clip = None
-        logger.info(f"Verificando arquivo: {os.path.exists(source_media_path)}")
-        logger.info(f"Tamanho do arquivo: {os.path.getsize(source_media_path)} bytes")
+        # Verifica template
+        if template_key not in LOCAL_REELS_TEMPLATES:
+            logger.error(f"❌ Template não encontrado: {template_key}")
+            return None
+        
+        template = LOCAL_REELS_TEMPLATES[template_key]
+        width, height = template['dimensions']['width'], template['dimensions']['height']
+        
+        # ========================================
+        # 1. CONVERSÃO DE VÍDEO (SE NECESSÁRIO)
+        # ========================================
+        converted_path, needs_cleanup_converted = convert_video_if_needed(source_media_path)
+        source_path = converted_path
+        
+        # ========================================
+        # 2. CARREGA VÍDEO/IMAGEM
+        # ========================================
+        logger.info(f"📂 Carregando mídia: {source_path}")
+        
         try:
-            clip = mpe.VideoFileClip(source_media_path)
-            logger.info(f"Vídeo original carregado: {clip.w}x{clip.h}, duração: {clip.duration}s")
-            logger.info(f"Proporção do vídeo original: {clip.w/clip.h:.3f}")
+            clip = mpe.VideoFileClip(source_path)
+            logger.info(f"✅ Vídeo carregado: {clip.w}x{clip.h}, {clip.duration:.1f}s")
         except Exception as e:
-            logger.error(f"Erro específico ao carregar vídeo: {type(e).__name__}: {e}")
-            logger.info("Convertendo imagem para vídeo")
+            logger.info(f"⚠️ Não é vídeo, convertendo imagem: {e}")
+            
+            # Converte imagem para vídeo
             try:
-                with Image.open(source_media_path) as img:
+                with Image.open(source_path) as img:
                     img = img.convert('RGB')
-                    temp_img = generate_filename("reels_from_image", "png")
-                    temp_path = os.path.join(Config.UPLOAD_FOLDER, temp_img)
-                    ensure_upload_directory()
-                    img.save(temp_path, format='PNG')
-                image_clip = mpe.ImageClip(temp_path).set_duration(5)
+                    temp_img_filename = generate_filename("reels_from_image", "png")
+                    temp_img_path = os.path.join(Config.UPLOAD_FOLDER, temp_img_filename)
+                    img.save(temp_img_path, format='PNG')
+                
+                image_clip = mpe.ImageClip(temp_img_path).set_duration(5)
                 clip = image_clip.set_fps(30)
-                logger.info("Imagem convertida para vídeo com sucesso")
+                logger.info("✅ Imagem convertida para vídeo (5s)")
+                
             except Exception as e2:
-                logger.error(f"Falha ao abrir mídia: {type(e2).__name__}: {e2}")
+                logger.error(f"❌ Falha ao processar mídia: {e2}")
                 return None
-
-        # Carrega a imagem de fundo baseada no template selecionado
+        
+        # ========================================
+        # 3. CARREGA TEMPLATE DE FUNDO
+        # ========================================
         if template_key == 'reels_modelo_2':
             template_bg_path = os.path.join(os.path.dirname(__file__), "template2.jpg")
         else:
             template_bg_path = os.path.join(os.path.dirname(__file__), "template1.jpg")
-            
+        
         if not os.path.exists(template_bg_path):
-            logger.error(f"Imagem de template não encontrada: {template_bg_path}")
-            logger.error(f"Template key: {template_key}")
+            logger.error(f"❌ Template de fundo não encontrado: {template_bg_path}")
             return None
         
-        logger.info(f"Usando template de fundo: {template_bg_path}")
-        
-        # Cria o fundo usando a imagem template esticando para ocupar toda a tela
+        logger.info(f"🎨 Usando fundo: {template_bg_path}")
         bg = mpe.ImageClip(template_bg_path).set_duration(clip.duration).resize((width, height))
-        logger.info(f"Fundo esticado para ocupar toda a tela: {width}x{height}")
         
-        # NOVA LÓGICA: Vídeo preenchendo toda a largura do template
+        # ========================================
+        # 4. REDIMENSIONA E POSICIONA VÍDEO
+        # ========================================
         video_area_top = 400
         video_area_bottom = 1520
         video_area_height = video_area_bottom - video_area_top
-        
         video_target_width = width
         
         original_aspect_ratio = clip.w / clip.h
         video_target_height = int(video_target_width / original_aspect_ratio)
         
-        logger.info(f"Proporção original do vídeo: {original_aspect_ratio:.3f}")
-        logger.info(f"Dimensões calculadas para largura total: {video_target_width}x{video_target_height}")
-        
         if video_target_height > video_area_height:
             video_target_height = video_area_height
             video_target_width = int(video_target_height * original_aspect_ratio)
-            logger.info(f"Ajustado por altura disponível: {video_target_width}x{video_target_height}")
         
+        logger.info(f"📐 Redimensionando para: {video_target_width}x{video_target_height}")
         resized_clip = clip.resize(newsize=(video_target_width, video_target_height))
         
         video_x = (width - video_target_width) // 2
         video_y = video_area_top + (video_area_height - video_target_height) // 2
         positioned_video = resized_clip.set_position((video_x, video_y))
         
-        logger.info(f"Vídeo redimensionado para: {video_target_width}x{video_target_height}")
-        logger.info(f"Posição do vídeo: ({video_x}, {video_y})")
-
+        # ========================================
+        # 5. CRIA TÍTULO (COM TRATAMENTO DE ERROS)
+        # ========================================
         title_clip = None
-        if title_text:
+        if title_text and title_text.strip():
             try:
+                logger.info("✍️ Criando overlay de título...")
+                
+                # Configurações por template
                 if template_key == 'reels_modelo_2':
                     canvas_height = 250
                     font_size = 51
@@ -841,30 +872,47 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
                     margin_left = 60
                     title_y_position = video_area_top - 62
                 
+                # Cria canvas
                 title_img = Image.new('RGBA', (width, canvas_height), (0, 0, 0, 0))
                 draw = ImageDraw.Draw(title_img)
                 
+                # Tenta carregar fonte
                 font = None
-                try:
-                    font = ImageFont.truetype("Oswald-Bold.ttf", font_size)
-                    logger.info(f"Fonte Oswald-Bold.ttf carregada: {font_size}px")
-                except Exception:
-                    try:
-                        font = ImageFont.truetype("arialbd.ttf", font_size)
-                    except Exception:
-                        font = ImageFont.load_default()
+                font_attempts = [
+                    ("Oswald-Bold.ttf", font_size),
+                    ("arialbd.ttf", font_size),
+                    ("Arial.ttf", font_size),
+                    ("DejaVuSans-Bold.ttf", font_size)
+                ]
                 
+                for font_name, size in font_attempts:
+                    try:
+                        font = ImageFont.truetype(font_name, size)
+                        logger.info(f"✅ Fonte carregada: {font_name}")
+                        break
+                    except Exception:
+                        continue
+                
+                if font is None:
+                    logger.warning("⚠️ Usando fonte padrão (qualidade reduzida)")
+                    font = ImageFont.load_default()
+                
+                # Processa texto
                 text = title_text.upper().strip()
                 max_width = width - (margin_left * 2)
                 
+                # Quebra em linhas
                 words = text.split()
                 lines = []
                 current_line = []
                 
                 for word in words:
                     test_line = ' '.join(current_line + [word])
-                    bbox = draw.textbbox((0, 0), test_line, font=font)
-                    text_width = bbox[2] - bbox[0]
+                    try:
+                        bbox = draw.textbbox((0, 0), test_line, font=font)
+                        text_width = bbox[2] - bbox[0]
+                    except Exception:
+                        text_width = len(test_line) * (font_size * 0.6)  # Estimativa
                     
                     if text_width <= max_width:
                         current_line.append(word)
@@ -878,12 +926,16 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
                 if current_line:
                     lines.append(' '.join(current_line))
                 
+                # Desenha texto
                 total_height = len(lines) * line_height
                 start_y = (canvas_height - total_height) // 2
                 
                 for i, line in enumerate(lines):
-                    bbox = draw.textbbox((0, 0), line, font=font)
-                    text_width = bbox[2] - bbox[0]
+                    try:
+                        bbox = draw.textbbox((0, 0), line, font=font)
+                        text_width = bbox[2] - bbox[0]
+                    except Exception:
+                        text_width = len(line) * (font_size * 0.6)
                     
                     if text_align == 'left':
                         x = margin_left
@@ -891,84 +943,123 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
                         x = (width - text_width) // 2
                     
                     y = start_y + i * line_height
-                    
                     draw.text((x, y), line, font=font, fill=(255, 255, 255, 255))
                 
+                # Salva overlay
                 title_filename = generate_filename("title_overlay", "png")
-                title_path = os.path.join(Config.UPLOAD_FOLDER, title_filename)
-                ensure_upload_directory()
-                title_img.save(title_path, format='PNG')
+                title_overlay_path = os.path.join(Config.UPLOAD_FOLDER, title_filename)
+                title_img.save(title_overlay_path, format='PNG')
                 
-                title_clip = mpe.ImageClip(title_path).set_duration(clip.duration).set_position((0, title_y_position))
-                logger.info(f"Título criado: {template_key}, align={text_align}, size={font_size}px")
+                # Cria clip do título
+                title_clip = mpe.ImageClip(title_overlay_path).set_duration(clip.duration).set_position((0, title_y_position))
+                logger.info(f"✅ Título criado com sucesso")
                 
             except Exception as e:
-                logger.error(f"Falha ao criar título: {e}")
+                logger.error(f"❌ Erro ao criar título: {e}")
                 import traceback
-                logger.error(f"Traceback: {traceback.format_exc()}")
-
+                logger.error(traceback.format_exc())
+                # Continua sem título se falhar
+        
+        # ========================================
+        # 6. COMPOSIÇÃO FINAL
+        # ========================================
+        logger.info("🎬 Compondo vídeo final...")
         clips_to_compose = [bg, positioned_video]
         if title_clip:
             clips_to_compose.append(title_clip)
         
         composed = mpe.CompositeVideoClip(clips_to_compose)
-
+        
+        # Preserva áudio
         try:
             if hasattr(clip, 'audio') and clip.audio is not None:
                 composed = composed.set_audio(clip.audio)
-                logger.info("Áudio original preservado")
+                logger.info("🔊 Áudio preservado")
         except Exception as e:
-            logger.warning(f"Não foi possível preservar áudio: {e}")
-
+            logger.warning(f"⚠️ Áudio não preservado: {e}")
+        
+        # ========================================
+        # 7. EXPORTAÇÃO
+        # ========================================
         out_filename = generate_filename(template_key, "mp4")
         out_path = os.path.join(Config.UPLOAD_FOLDER, out_filename)
         
-        fps = None
+        fps = 30
         try:
             fps = int(getattr(clip, 'fps', 30) or 30)
+            fps = min(max(fps, 24), 60)
         except Exception:
             fps = 30
-
-        logger.info(f"Exportando vídeo para: {out_path}")
+        
+        logger.info(f"💾 Exportando para: {out_filename}")
+        logger.info(f"⚙️ FPS: {fps}, Threads: 8, Preset: veryfast")
+        
         try:
             composed.write_videofile(
                 out_path,
-                fps=min(max(fps, 24), 60),
+                fps=fps,
                 codec='libx264',
                 audio_codec='aac',
                 threads=8,
                 preset='veryfast',
                 verbose=False,
-                logger=None
+                logger=None,
+                bitrate='1500k',
+                audio_bitrate='128k'
             )
-            logger.info("Exportação concluída!")
+            logger.info("✅ Exportação concluída!")
+            
         except Exception as e:
-            logger.error(f"Erro na exportação: {type(e).__name__}: {e}")
+            logger.error(f"❌ Erro na exportação: {e}")
             import traceback
-            logger.error(f"Traceback exportação: {traceback.format_exc()}")
+            logger.error(traceback.format_exc())
             return None
-
-        try:
-            if clip is not None:
-                clip.close()
-            if 'resized_clip' in locals():
-                resized_clip.close()
-            if 'composed' in locals():
-                composed.close()
-            if title_clip is not None:
-                title_clip.close()
-        except Exception:
-            pass
-
+        
+        # ========================================
+        # 8. RETORNO
+        # ========================================
         public_url = f"{request.url_root}uploads/{out_filename}"
-        logger.info(f"Reels gerado com sucesso: {public_url}")
+        logger.info(f"🎉 Reels gerado: {public_url}")
+        logger.info("=" * 60)
+        
         return out_path, public_url
         
     except Exception as e:
-        logger.error(f"Falha ao gerar vídeo local de reels: {type(e).__name__}: {e}")
+        logger.error(f"❌ ERRO CRÍTICO: {type(e).__name__}: {e}")
         import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.error(traceback.format_exc())
         return None
+        
+    finally:
+        # ========================================
+        # 9. LIMPEZA GARANTIDA (SEMPRE EXECUTA)
+        # ========================================
+        logger.info("🧹 Iniciando limpeza de recursos...")
+        
+        # Fecha todos os clips
+        force_close_clips(
+            clip,
+            resized_clip,
+            bg,
+            title_clip,
+            composed
+        )
+        
+        # Remove arquivos temporários
+        cleanup_files = []
+        
+        if needs_cleanup_converted and converted_path:
+            cleanup_files.append(converted_path)
+        
+        if title_overlay_path:
+            cleanup_files.append(title_overlay_path)
+        
+        if cleanup_files:
+            cleanup_temp_files(*cleanup_files)
+        
+        # Força coleta de lixo final
+        gc.collect()
+        logger.info("✅ Limpeza concluída")
     
 def generate_local_capa_jornal(source_media_path: str) -> Optional[Tuple[str, str]]:
     """
