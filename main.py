@@ -1,4 +1,10 @@
 
+
+# ✅ ADICIONE estes imports:
+from concurrent.futures import ThreadPoolExecutor
+import uuid
+import threading
+
 from flask import Response, stream_with_context
 import json
 
@@ -826,6 +832,15 @@ def error_reels_progress(task_id: str, error_message: str):
         'status': 'error'
     }
 
+def aggressive_cleanup():
+    """Limpeza agressiva de memória"""
+    import gc
+    
+    # Coleta de lixo múltipla
+    for _ in range(3):
+        gc.collect()
+    
+    logger.info("🧹 Limpeza agressiva executada")
 
 def generate_local_reels_video(source_media_path: str, title_text: str, template_key: str, task_id: str = None) -> Optional[Tuple[str, str]]:
     """
@@ -1207,13 +1222,11 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
         if task_id:
             error_reels_progress(task_id, f"Erro crítico: {type(e).__name__}: {str(e)}")
         return None
-        
-    finally:
-        # ========================================
+
+        finally:
         # 9. LIMPEZA GARANTIDA (SEMPRE EXECUTA)
-        # ========================================
         logger.info("🧹 Iniciando limpeza de recursos...")
-        
+    
         # Fecha todos os clips
         force_close_clips(
             clip,
@@ -1234,6 +1247,9 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
         
         if cleanup_files:
             cleanup_temp_files(*cleanup_files)
+        
+        # ✅ CORREÇÃO 2: Limpeza agressiva
+        aggressive_cleanup()
         
         # Força coleta de lixo final
         gc.collect()
@@ -2090,33 +2106,45 @@ def handle_watermark(payload: Dict[str, Any], request) -> jsonify:
 
 # Dicionário global para armazenar progresso
 reels_progress = {}
+reels_executor = ThreadPoolExecutor(max_workers=2)  # ← ADICIONE
+active_tasks = {}  # ← ADICIONE
 
 @app.route('/api/reels-progress/<task_id>')
 def reels_progress_stream(task_id):
-    """
-    Stream de progresso em tempo real usando SSE
-    """
+    """Stream de progresso com heartbeat para mobile"""
     def generate():
+        last_update = time.time()  # ✅ ADICIONE
+        
         while True:
+            current_time = time.time()  # ✅ ADICIONE
+            
+            # ✅ CORREÇÃO 4: Heartbeat a cada 15 segundos
+            if current_time - last_update > 15:
+                yield f": heartbeat\n\n"
+                last_update = current_time
+            
             if task_id in reels_progress:
                 progress_data = reels_progress[task_id]
                 
-                # Envia dados de progresso
+                # Envia dados
                 yield f"data: {json.dumps(progress_data)}\n\n"
+                last_update = current_time  # ✅ ADICIONE
                 
-                # Se concluído ou erro, para o stream
+                # Se concluído, para
                 if progress_data.get('status') in ['completed', 'error']:
+                    time.sleep(2)  # ✅ ADICIONE (aguarda 2s antes de fechar)
                     del reels_progress[task_id]
                     break
             
-            time.sleep(0.5)  # Atualiza a cada 500ms
+            time.sleep(0.5)
     
     return Response(
         stream_with_context(generate()),
         mimetype='text/event-stream',
         headers={
             'Cache-Control': 'no-cache',
-            'X-Accel-Buffering': 'no'
+            'X-Accel-Buffering': 'no',
+            'Connection': 'keep-alive'  # ✅ ADICIONE
         }
     )
 
@@ -2162,21 +2190,43 @@ def handle_generate_post(payload: Dict[str, Any], request) -> jsonify:
         ))
     
     # Check if it's a local reels template
+    # Check if it's a local reels template
     if template_key in LOCAL_REELS_TEMPLATES:
-        logger.info("🎬 Using local reels video compositor")
-        success, filepath, public_url = save_uploaded_file(file, "post")
+        logger.info("🎬 Gerando REELS com controle de threads")
         
+        # ✅ CORREÇÃO 3A: Verifica limite de tasks ativas
+        active_count = len([t for t in active_tasks.values() if not t.done()])
+        if active_count >= 2:
+            return jsonify(error_response(
+                "Muitos vídeos sendo processados. Aguarde um concluir."
+            ))
+        
+        success, filepath, public_url = save_uploaded_file(file, "post")
         if not success:
             return jsonify(error_response(public_url))
         
-        generated = generate_local_reels_video(filepath, title, template_key)
-        if not generated:
-            return jsonify(error_response("Falha ao gerar reels"))
+        # Gera task_id
+        task_id = str(uuid.uuid4())
         
-        _, public_out_url = generated
+        # ✅ CORREÇÃO 3B: Usa executor ao invés de Thread
+        def generate_with_cleanup():
+            try:
+                generate_local_reels_video(filepath, title, template_key, task_id)
+            finally:
+                # Remove da lista de tasks ativas
+                if task_id in active_tasks:
+                    del active_tasks[task_id]
+                # Limpeza agressiva
+                aggressive_cleanup()
+        
+        # Submete para executor
+        future = reels_executor.submit(generate_with_cleanup)
+        active_tasks[task_id] = future
+        
         return jsonify(success_response(
-            "Reels gerado com sucesso!",
-            videoUrl=public_out_url
+            "Processamento iniciado!",
+            taskId=task_id,
+            progressUrl=f"/api/reels-progress/{task_id}"
         ))
     
     # Normal Placid template processing
@@ -3153,7 +3203,126 @@ HTML_TEMPLATE = """
         let selectedTemplate = 'reels_modelo_1';
         let uploadedFiles = {};
         let generatedImageUrls = {};
+let currentEventSource = null;
 
+function startReelsProgress(taskId, progressUrl) {
+    console.log('📊 Iniciando monitoramento:', taskId);
+    
+    // ✅ CORREÇÃO 1A: Fecha conexão anterior
+    if (currentEventSource) {
+        console.log('🔌 Fechando conexão anterior...');
+        currentEventSource.close();
+        currentEventSource = null;
+    }
+    
+    // Mostra container
+    const progressContainer = document.getElementById('reels-progress-container');
+    if (progressContainer) {
+        progressContainer.classList.add('active');
+    }
+    document.getElementById('post-loading').style.display = 'none';
+    
+    // ✅ CORREÇÃO 1B: Timeout de segurança (5 minutos)
+    let timeoutId = setTimeout(() => {
+        console.error('⏰ Timeout: processamento demorou muito');
+        if (currentEventSource) {
+            currentEventSource.close();
+            currentEventSource = null;
+        }
+        handleReelsError('Timeout: processamento demorou mais de 5 minutos');
+    }, 5 * 60 * 1000);
+    
+    // Conecta ao SSE
+    currentEventSource = new EventSource(progressUrl);
+    
+    currentEventSource.onmessage = function(event) {
+        console.log('📥 Progresso:', event.data);
+        
+        try {
+            const data = JSON.parse(event.data);
+            updateProgressUI(data);
+            
+            if (data.status === 'completed' || data.status === 'error') {
+                clearTimeout(timeoutId);
+                currentEventSource.close();
+                currentEventSource = null;
+                
+                if (data.status === 'completed') {
+                    handleReelsSuccess(data.videoUrl);
+                } else {
+                    handleReelsError(data.message);
+                }
+            }
+        } catch (e) {
+            console.error('❌ Erro ao parsear:', e);
+            clearTimeout(timeoutId);
+            currentEventSource.close();
+            currentEventSource = null;
+            handleReelsError('Erro ao processar progresso');
+        }
+    };
+    
+    currentEventSource.onerror = function(error) {
+        console.error('❌ Erro no EventSource:', error);
+        clearTimeout(timeoutId);
+        
+        if (currentEventSource) {
+            currentEventSource.close();
+            currentEventSource = null;
+        }
+        
+        handleReelsError('Erro na conexão de progresso');
+    };
+}
+
+function updateProgressUI(data) {
+    // Atualiza barra de progresso se existir
+    const progressBar = document.getElementById('progress-bar-fill');
+    const progressPercentage = document.getElementById('progress-percentage');
+    const progressMessage = document.getElementById('progress-message');
+    
+    if (progressBar) {
+        progressBar.style.width = data.progress + '%';
+    }
+    
+    if (progressPercentage) {
+        progressPercentage.textContent = data.progress + '%';
+    }
+    
+    if (progressMessage) {
+        progressMessage.textContent = data.message;
+    }
+}
+
+function handleReelsSuccess(videoUrl) {
+    generatedImageUrls.post = videoUrl;
+    const preview = document.getElementById('post-preview');
+    preview.innerHTML = `<video controls style="max-width: 100%; max-height: 300px; border-radius: 10px;"><source src="${videoUrl}" type="video/mp4"></video>`;
+    showSuccess('Reels gerado com sucesso!', 'post');
+    
+    // Mostra botões
+    document.getElementById('download-post-btn').style.display = 'inline-block';
+    document.getElementById('open-post-video').href = videoUrl;
+    document.getElementById('open-post-video').style.display = 'inline-block';
+    document.getElementById('open-post-image').style.display = 'none';
+    
+    // Oculta container de progresso após 3s
+    setTimeout(() => {
+        const progressContainer = document.getElementById('reels-progress-container');
+        if (progressContainer) {
+            progressContainer.classList.remove('active');
+        }
+    }, 3000);
+}
+
+function handleReelsError(errorMessage) {
+    showError(errorMessage, 'post');
+    
+    const progressContainer = document.getElementById('reels-progress-container');
+    if (progressContainer) {
+        progressContainer.classList.remove('active');
+    }
+}
         // Registry of templates by format with preview icon and label
         const TEMPLATE_REGISTRY = {
             watermark: [
@@ -3445,30 +3614,25 @@ function updateFieldsForTemplate(templateKey) {
             }, uploadedFiles.post);
 
             hideLoading('post');
-            
-            if (apiResult.success) {
-                if (apiResult.videoUrl) {
-                    generatedImageUrls.post = apiResult.videoUrl;
-                    const preview = document.getElementById('post-preview');
-                    preview.innerHTML = `<video controls style="max-width: 100%; max-height: 300px; border-radius: 10px;"><source src="${apiResult.videoUrl}" type="video/mp4"></video>`;
-                    showSuccess('Reels gerado com sucesso!', 'post');
-                    
-                    // Mostra botões para vídeo
-                    document.getElementById('download-post-btn').style.display = 'inline-block';
-                    document.getElementById('open-post-video').href = apiResult.videoUrl;
-                    document.getElementById('open-post-video').style.display = 'inline-block';
-                    document.getElementById('open-post-image').style.display = 'none';
-                } else if (apiResult.imageUrl) {
-                    generatedImageUrls.post = apiResult.imageUrl;
-                    const preview = document.getElementById('post-preview');
-                    preview.innerHTML = `<img src="${apiResult.imageUrl}" style="max-width: 100%; max-height: 300px; border-radius: 10px; object-fit: contain;">`;
-                    showSuccess('Post gerado com sucesso!', 'post');
-                    
-                    // Mostra botões para imagem
-                    document.getElementById('download-post-btn').style.display = 'inline-block';
-                    document.getElementById('open-post-image').href = apiResult.imageUrl;
-                    document.getElementById('open-post-image').style.display = 'inline-block';
-                    document.getElementById('open-post-video').style.display = 'none';
+           if (apiResult.success) {
+    // ✅ NOVO: Se for reels com task_id, inicia monitoramento de progresso
+    if (apiResult.taskId && apiResult.progressUrl) {
+        startReelsProgress(apiResult.taskId, apiResult.progressUrl);
+        return; // Para aqui para reels, o resto é tratado pelo SSE
+    }
+    
+    // Para outros templates (não-reels)
+    if (apiResult.videoUrl) {
+        generatedImageUrls.post = apiResult.videoUrl;
+        const preview = document.getElementById('post-preview');
+        preview.innerHTML = `<video controls style="max-width: 100%; max-height: 300px; border-radius: 10px;"><source src="${apiResult.videoUrl}" type="video/mp4"></video>`;
+        showSuccess('Reels gerado com sucesso!', 'post');
+        
+        // Mostra botões para vídeo
+        document.getElementById('download-post-btn').style.display = 'inline-block';
+        document.getElementById('open-post-video').href = apiResult.videoUrl;
+        document.getElementById('open-post-video').style.display = 'inline-block';
+        document.getElementById('open-post-image').style.display = 'none'; 
                 } else if (apiResult.imageId) {
                     showSuccess('Post em processamento. Aguarde...', 'post');
                     checkImageStatus(apiResult.imageId, 'post');
