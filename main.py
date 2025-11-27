@@ -1,6 +1,4 @@
 
-
-# ✅ ADICIONE estes imports:
 from concurrent.futures import ThreadPoolExecutor
 import uuid
 import threading
