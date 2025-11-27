@@ -1,3 +1,57 @@
+
+from flask import Response, stream_with_context
+import json
+
+"""
+SUBSTITUA a rota /api/process por esta versão com SSE (Server-Sent Events):
+"""
+
+@app.route('/api/process', methods=['POST'])
+def process_request():
+    """Main API endpoint - VERSÃO COM PROGRESSO"""
+    logger.info("=" * 60)
+    logger.info("🌐 STARTING process_request")
+    
+    ensure_upload_directory()
+    
+    try:
+        # Parse request data
+        if request.form:
+            action = request.form.get('action')
+            data_str = request.form.get('data')
+            payload = json.loads(data_str) if data_str else {}
+        elif request.content_type == 'application/json':
+            data = request.json or {}
+            action = data.get('action')
+            payload = data.get('data', {})
+        else:
+            return jsonify(error_response("Unsupported content type")), 400
+        
+        # Route to appropriate handler
+        handlers = {
+            'apply_watermark': handle_watermark,
+            'generate_post': handle_generate_post,  # Este será modificado
+            'generate_title_ai': handle_generate_title,
+            'generate_captions_ai': handle_generate_captions,
+            'rewrite_news_ai': handle_rewrite_news,
+            'save_manual_caption': handle_save_caption,
+            'save_manual_rewrite': handle_save_rewrite,
+            'save_manual_title': handle_save_title,
+        }
+        
+        handler = handlers.get(action)
+        
+        if not handler:
+            return jsonify(error_response(f"Unknown action: {action}")), 400
+        
+        result = handler(payload, request)
+        return result
+        
+    except Exception as e:
+        logger.error(f"❌ Exception: {e}")
+        return jsonify(error_response("Internal server error")), 500
+
+
 import gc  # ← ADICIONE NO TOPO DO ARQUIVO (junto com outros imports)
 import tempfile
 import shutil
@@ -734,20 +788,62 @@ def force_close_clips(*clips):
     
     # Força coleta de lixo
     gc.collect()
-    
-def generate_local_reels_video(source_media_path: str, title_text: str, template_key: str) -> Optional[Tuple[str, str]]:
+
+import uuid
+
+def update_reels_progress(task_id: str, step: str, progress: int, message: str):
     """
-    Gera um vídeo de reels com tratamento robusto de erros
-    VERSÃO CORRIGIDA - Resolve erros intermitentes
+    Atualiza o progresso da geração de reels
+    """
+    reels_progress[task_id] = {
+        'step': step,
+        'progress': progress,
+        'message': message,
+        'status': 'processing'
+    }
+    logger.info(f"📊 Progress [{task_id}]: {progress}% - {step} - {message}")
+
+def complete_reels_progress(task_id: str, video_url: str):
+    """
+    Marca a geração como completa
+    """
+    reels_progress[task_id] = {
+        'step': 'completed',
+        'progress': 100,
+        'message': 'Reels gerado com sucesso!',
+        'status': 'completed',
+        'videoUrl': video_url
+    }
+
+def error_reels_progress(task_id: str, error_message: str):
+    """
+    Marca erro na geração
+    """
+    reels_progress[task_id] = {
+        'step': 'error',
+        'progress': 0,
+        'message': error_message,
+        'status': 'error'
+    }
+
+
+def generate_local_reels_video(source_media_path: str, title_text: str, template_key: str, task_id: str = None) -> Optional[Tuple[str, str]]:
+    """
+    Gera um vídeo de reels com tratamento robusto de erros + BARRA DE PROGRESSO
+    VERSÃO HÍBRIDA - Melhor de ambos os mundos! 🚀
     """
     if mpe is None:
         logger.error("❌ MoviePy não está disponível")
+        if task_id:
+            error_reels_progress(task_id, "MoviePy não está disponível")
         return None
     
     # Verifica templates ANTES de começar
     missing_templates = verify_template_files()
     if missing_templates:
         logger.error(f"❌ Templates faltando: {missing_templates}")
+        if task_id:
+            error_reels_progress(task_id, f"Templates faltando: {missing_templates}")
         return None
     
     logger.info("=" * 60)
@@ -755,6 +851,14 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
     logger.info(f"📁 Arquivo: {source_media_path}")
     logger.info(f"🎨 Template: {template_key}")
     logger.info(f"📝 Título: {title_text}")
+    if task_id:
+        logger.info(f"🆔 Task ID: {task_id}")
+    
+    # ========================================
+    # PROGRESSO: 5% - Início
+    # ========================================
+    if task_id:
+        update_reels_progress(task_id, 'init', 5, 'Inicializando processamento...')
     
     # Variáveis para cleanup
     converted_path = None
@@ -773,20 +877,34 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
         # Verifica template
         if template_key not in LOCAL_REELS_TEMPLATES:
             logger.error(f"❌ Template não encontrado: {template_key}")
+            if task_id:
+                error_reels_progress(task_id, f"Template {template_key} não encontrado")
             return None
         
         template = LOCAL_REELS_TEMPLATES[template_key]
         width, height = template['dimensions']['width'], template['dimensions']['height']
         
         # ========================================
-        # 1. CONVERSÃO DE VÍDEO (SE NECESSÁRIO)
+        # ETAPA 1: CONVERSÃO (10% - 20%)
         # ========================================
+        logger.info("🔄 Etapa 1/8: Verificando formato do vídeo...")
+        if task_id:
+            update_reels_progress(task_id, 'convert', 10, 'Verificando formato do vídeo...')
+        
         converted_path, needs_cleanup_converted = convert_video_if_needed(source_media_path)
         source_path = converted_path
         
+        logger.info("✅ Formato verificado")
+        if task_id:
+            update_reels_progress(task_id, 'convert', 20, 'Formato verificado ✓')
+        
         # ========================================
-        # 2. CARREGA VÍDEO/IMAGEM
+        # ETAPA 2: CARREGAMENTO (25% - 35%)
         # ========================================
+        logger.info("📂 Etapa 2/8: Carregando mídia...")
+        if task_id:
+            update_reels_progress(task_id, 'load', 25, 'Carregando arquivo de mídia...')
+        
         logger.info(f"📂 Carregando mídia: {source_path}")
         
         try:
@@ -794,6 +912,9 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
             logger.info(f"✅ Vídeo carregado: {clip.w}x{clip.h}, {clip.duration:.1f}s")
         except Exception as e:
             logger.info(f"⚠️ Não é vídeo, convertendo imagem: {e}")
+            
+            if task_id:
+                update_reels_progress(task_id, 'load', 28, 'Convertendo imagem para vídeo...')
             
             # Converte imagem para vídeo
             try:
@@ -809,11 +930,21 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
                 
             except Exception as e2:
                 logger.error(f"❌ Falha ao processar mídia: {e2}")
+                if task_id:
+                    error_reels_progress(task_id, f"Falha ao processar mídia: {str(e2)}")
                 return None
         
+        logger.info("✅ Mídia carregada com sucesso")
+        if task_id:
+            update_reels_progress(task_id, 'load', 35, 'Mídia carregada com sucesso ✓')
+        
         # ========================================
-        # 3. CARREGA TEMPLATE DE FUNDO
+        # ETAPA 3: TEMPLATE (40% - 50%)
         # ========================================
+        logger.info("🎨 Etapa 3/8: Carregando template de fundo...")
+        if task_id:
+            update_reels_progress(task_id, 'template', 40, 'Carregando template de fundo...')
+        
         if template_key == 'reels_modelo_2':
             template_bg_path = os.path.join(os.path.dirname(__file__), "template2.jpg")
         else:
@@ -821,14 +952,24 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
         
         if not os.path.exists(template_bg_path):
             logger.error(f"❌ Template de fundo não encontrado: {template_bg_path}")
+            if task_id:
+                error_reels_progress(task_id, "Template de fundo não encontrado")
             return None
         
         logger.info(f"🎨 Usando fundo: {template_bg_path}")
         bg = mpe.ImageClip(template_bg_path).set_duration(clip.duration).resize((width, height))
         
+        logger.info("✅ Template carregado")
+        if task_id:
+            update_reels_progress(task_id, 'template', 50, 'Template carregado ✓')
+        
         # ========================================
-        # 4. REDIMENSIONA E POSICIONA VÍDEO
+        # ETAPA 4: REDIMENSIONAMENTO (55% - 65%)
         # ========================================
+        logger.info("📐 Etapa 4/8: Redimensionando vídeo...")
+        if task_id:
+            update_reels_progress(task_id, 'resize', 55, 'Redimensionando vídeo...')
+        
         video_area_top = 400
         video_area_bottom = 1520
         video_area_height = video_area_bottom - video_area_top
@@ -848,9 +989,17 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
         video_y = video_area_top + (video_area_height - video_target_height) // 2
         positioned_video = resized_clip.set_position((video_x, video_y))
         
+        logger.info("✅ Vídeo redimensionado")
+        if task_id:
+            update_reels_progress(task_id, 'resize', 65, 'Vídeo redimensionado ✓')
+        
         # ========================================
-        # 5. CRIA TÍTULO (COM TRATAMENTO DE ERROS)
+        # ETAPA 5: TÍTULO (70% - 75%)
         # ========================================
+        logger.info("✍️ Etapa 5/8: Criando título...")
+        if task_id:
+            update_reels_progress(task_id, 'title', 70, 'Criando título...')
+        
         title_clip = None
         if title_text and title_text.strip():
             try:
@@ -959,11 +1108,20 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
                 import traceback
                 logger.error(traceback.format_exc())
                 # Continua sem título se falhar
+                if task_id:
+                    update_reels_progress(task_id, 'title', 73, 'Título opcional não criado, continuando...')
+        
+        logger.info("✅ Etapa de título concluída")
+        if task_id:
+            update_reels_progress(task_id, 'title', 75, 'Título criado ✓')
         
         # ========================================
-        # 6. COMPOSIÇÃO FINAL
+        # ETAPA 6: COMPOSIÇÃO (80% - 85%)
         # ========================================
-        logger.info("🎬 Compondo vídeo final...")
+        logger.info("🎬 Etapa 6/8: Compondo vídeo final...")
+        if task_id:
+            update_reels_progress(task_id, 'compose', 80, 'Compondo vídeo final...')
+        
         clips_to_compose = [bg, positioned_video]
         if title_clip:
             clips_to_compose.append(title_clip)
@@ -978,9 +1136,17 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
         except Exception as e:
             logger.warning(f"⚠️ Áudio não preservado: {e}")
         
+        logger.info("✅ Composição concluída")
+        if task_id:
+            update_reels_progress(task_id, 'compose', 85, 'Composição concluída ✓')
+        
         # ========================================
-        # 7. EXPORTAÇÃO
+        # ETAPA 7: EXPORTAÇÃO (90% - 99%)
         # ========================================
+        logger.info("💾 Etapa 7/8: Exportando vídeo...")
+        if task_id:
+            update_reels_progress(task_id, 'export', 90, 'Exportando vídeo (isso pode demorar)...')
+        
         out_filename = generate_filename(template_key, "mp4")
         out_path = os.path.join(Config.UPLOAD_FOLDER, out_filename)
         
@@ -1013,14 +1179,24 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
             logger.error(f"❌ Erro na exportação: {e}")
             import traceback
             logger.error(traceback.format_exc())
+            if task_id:
+                error_reels_progress(task_id, f"Erro na exportação: {str(e)}")
             return None
         
+        if task_id:
+            update_reels_progress(task_id, 'export', 99, 'Exportação concluída ✓')
+        
         # ========================================
-        # 8. RETORNO
+        # ETAPA 8: CONCLUSÃO (100%)
         # ========================================
+        logger.info("🎉 Etapa 8/8: Finalizando...")
+        
         public_url = f"{request.url_root}uploads/{out_filename}"
         logger.info(f"🎉 Reels gerado: {public_url}")
         logger.info("=" * 60)
+        
+        if task_id:
+            complete_reels_progress(task_id, public_url)
         
         return out_path, public_url
         
@@ -1028,6 +1204,8 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
         logger.error(f"❌ ERRO CRÍTICO: {type(e).__name__}: {e}")
         import traceback
         logger.error(traceback.format_exc())
+        if task_id:
+            error_reels_progress(task_id, f"Erro crítico: {type(e).__name__}: {str(e)}")
         return None
         
     finally:
@@ -1909,6 +2087,38 @@ def handle_watermark(payload: Dict[str, Any], request) -> jsonify:
             ))
     else:
         return jsonify(error_response("Failed to create watermark"))
+
+# Dicionário global para armazenar progresso
+reels_progress = {}
+
+@app.route('/api/reels-progress/<task_id>')
+def reels_progress_stream(task_id):
+    """
+    Stream de progresso em tempo real usando SSE
+    """
+    def generate():
+        while True:
+            if task_id in reels_progress:
+                progress_data = reels_progress[task_id]
+                
+                # Envia dados de progresso
+                yield f"data: {json.dumps(progress_data)}\n\n"
+                
+                # Se concluído ou erro, para o stream
+                if progress_data.get('status') in ['completed', 'error']:
+                    del reels_progress[task_id]
+                    break
+            
+            time.sleep(0.5)  # Atualiza a cada 500ms
+    
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no'
+        }
+    )
 
 def handle_generate_post(payload: Dict[str, Any], request) -> jsonify:
     """Handle post generation"""
