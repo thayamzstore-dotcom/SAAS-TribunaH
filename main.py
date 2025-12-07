@@ -615,7 +615,7 @@ def reels_progress_stream(task_id):
     def generate():
         last_update = time.time()
         start_time = time.time()
-        max_duration = 15 * 60
+        max_duration = 30 * 60
         
         while True:
             current_time = time.time()
@@ -1694,8 +1694,8 @@ HTML_TEMPLATE += """
                     currentEventSource.close();
                     currentEventSource = null;
                 }
-                handleReelsError('Timeout: processamento demorou mais de 15 minutos');
-            }, 15 * 60 * 1000);
+                handleReelsError('Timeout: processamento demorou mais de 30 minutos');
+            }, 30 * 60 * 1000);
             
             currentEventSource = new EventSource(progressUrl);
             
