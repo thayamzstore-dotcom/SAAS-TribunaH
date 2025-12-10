@@ -722,7 +722,7 @@ def handle_generate_post(payload: Dict[str, Any], req) -> jsonify:
     template_key = payload.get('template', 'feed_1')
     title = payload.get('title', '')
     subject = payload.get('subject', '')
-    credits = payload.get('credits', '')
+    credits = payload.get('credentials', '')
     
     # ✅ CAPTURA base_url ANTES de qualquer operação
     base_url = req.url_root
@@ -771,7 +771,7 @@ def handle_generate_post(payload: Dict[str, Any], req) -> jsonify:
             progressUrl=f"/api/reels-progress/{task_id}"
         ))
     
-    # Templates Placid normais
+    # Templates Placid normais (Stories, Feed, Watermark)
     if template_key not in PLACID_TEMPLATES:
         template_key = 'feed_1'
     
@@ -786,14 +786,24 @@ def handle_generate_post(payload: Dict[str, Any], req) -> jsonify:
     
     layers = {"imgprincipal": {"image": public_url}}
     
+    # ✅ CORRIGIDO: Stories também recebe o título
     if template_info['type'] in ['feed', 'watermark', 'story'] and title:
         layers["titulocopy"] = {"text": title}
+        logger.info(f"✅ Título '{title}' adicionado para tipo '{template_info['type']}'")
     
+    # Campos específicos do Feed
     if template_info['type'] == 'feed':
         if subject:
             layers["assuntext"] = {"text": subject}
         if credits:
             layers["creditfoto"] = {"text": f" {credits}"}
+    
+    # 🐛 DEBUG: Ver o que está sendo enviado
+    logger.info("=" * 60)
+    logger.info(f"📤 Enviando para Placid:")
+    logger.info(f"   Template: {template_key} ({template_info['type']})")
+    logger.info(f"   Layers: {layers}")
+    logger.info("=" * 60)
     
     result = create_placid_image(template_info['uuid'], layers)
     
