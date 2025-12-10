@@ -786,7 +786,7 @@ def handle_generate_post(payload: Dict[str, Any], req) -> jsonify:
     
     layers = {"imgprincipal": {"image": public_url}}
     
-    if template_info['type'] in ['feed', 'watermark'] and title:
+    if template_info['type'] in ['feed', 'watermark', 'story'] and title:
         layers["titulocopy"] = {"text": title}
     
     if template_info['type'] == 'feed':
