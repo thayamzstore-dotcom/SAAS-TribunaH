@@ -1977,7 +1977,16 @@ HTML_TEMPLATE += """
             const titulo = document.getElementById('titulo').value.trim();
             const assunto = document.getElementById('assunto').value.trim();
             const creditos = document.getElementById('creditos').value.trim();
-            
+            // 🐛 DEBUG: Ver valores capturados
+    console.log('='.repeat(60));
+    console.log('🔍 DEBUG JAVASCRIPT:');
+    console.log('📌 Template selecionado:', selectedTemplate);
+    console.log('📌 Formato selecionado:', selectedFormat);
+    console.log('📌 Título digitado:', titulo);
+    console.log('📌 Assunto digitado:', assunto);
+    console.log('📌 Créditos digitados:', creditos);
+    console.log('='.repeat(60));
+```
             if (selectedTemplate === 'feed_capa_jornal') {
                 // Não valida nada
             } else if (selectedTemplate.includes('feed') && (!titulo || !assunto || !creditos)) {
