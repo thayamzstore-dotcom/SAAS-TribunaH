@@ -722,7 +722,7 @@ def handle_generate_post(payload: Dict[str, Any], req) -> jsonify:
     template_key = payload.get('template', 'feed_1')
     title = payload.get('title', '')
     subject = payload.get('subject', '')
-    credits = payload.get('credits', '')
+    credits = payload.get('credentials', '')
     
     # ✅ CAPTURA base_url ANTES de qualquer operação
     base_url = req.url_root
@@ -1977,16 +1977,7 @@ HTML_TEMPLATE += """
             const titulo = document.getElementById('titulo').value.trim();
             const assunto = document.getElementById('assunto').value.trim();
             const creditos = document.getElementById('creditos').value.trim();
-            // 🐛 DEBUG: Ver valores capturados
-    console.log('='.repeat(60));
-    console.log('🔍 DEBUG JAVASCRIPT:');
-    console.log('📌 Template selecionado:', selectedTemplate);
-    console.log('📌 Formato selecionado:', selectedFormat);
-    console.log('📌 Título digitado:', titulo);
-    console.log('📌 Assunto digitado:', assunto);
-    console.log('📌 Créditos digitados:', creditos);
-    console.log('='.repeat(60));
-```
+            
             if (selectedTemplate === 'feed_capa_jornal') {
                 // Não valida nada
             } else if (selectedTemplate.includes('feed') && (!titulo || !assunto || !creditos)) {
