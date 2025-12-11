@@ -46,7 +46,7 @@ def login_required(f):
 # Configuration
 class Config:
     PLACID_API_TOKEN = 'placid-mmv6puv1gvuuci'
-    PLACID_API_URL = 'https://api.placid.app/api/rest/images'
+    PLACID_API_URL = 'https://api.placid.app/aages'
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
     OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
     UPLOAD_FOLDER = os.path.abspath('uploads')
