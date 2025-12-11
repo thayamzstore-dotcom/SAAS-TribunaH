@@ -803,9 +803,9 @@ derate_post(payload: Dict[str, Any], req) -> jsonify:
     logger.info(f"📤 Enviando para Placid:")
     logger.info(f"   Template: {template_key} ({template_info['type']})")
     logger.info(f"   Layers: {layers}")
-    logger.info("=" * 60)
-    
-    result = create_placid_image(template_info['uuid'], layers)
+    logger.info("=" * 
+
+                
     
     if result:
         if result.get('image_url'):
@@ -834,7 +834,7 @@ def handle_watermark(payload: Dict[str, Any], req) -> jsonify:
     
     layers = {"imgprincipal": {"image": public_url}}
     
-    result = create_placid_image(template_info['uuid'], layers)
+    
     
     if result and result.get('image_url'):
         return jsonify(success_response("Watermark aplicado!", imageUrl=result['image_url']))
