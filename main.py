@@ -713,7 +713,7 @@ def process_request():
         logger.error(f"Erro: {e}")
         return jsonify(error_response("Internal error")), 500
 
-def handle_generate_post(payload: Dict[str, Any], req) -> jsonify:
+derate_post(payload: Dict[str, Any], req) -> jsonify:
     """Handle post generation"""
     file = req.files.get('file')
     if not file:
@@ -779,7 +779,7 @@ def handle_generate_post(payload: Dict[str, Any], req) -> jsonify:
     
     success, filepath, public_url = save_uploaded_file(file, "post")
     if not success:
-        return jsonify(error_response("Upload failed"))
+        return jsonify(error_response("Créditos expirados"))
     
     # ✅ CORRIGE public_url com base_url
     public_url = public_url.replace("{BASE_URL}", base_url)
@@ -813,7 +813,7 @@ def handle_generate_post(payload: Dict[str, Any], req) -> jsonify:
         else:
             return jsonify(success_response("Processando...", imageId=result.get('id')))
     
-    return jsonify(error_response("Falha ao gerar"))
+    return jsonify(error_response("Créditos Expirados"))
 
 def handle_watermark(payload: Dict[str, Any], req) -> jsonify:
     """Handle watermark"""
