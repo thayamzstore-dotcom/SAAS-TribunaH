@@ -45,8 +45,8 @@ def login_required(f):
 
 # Configuration
 class Config:
-    PLACID_API_TOKEN = 'placid-mmv6puv1gvuuci'
-    PLACID_API_URL = 'https://api.placid.app/aages'
+    PLACID_API_TOKEN = 'placid-mmv6puv1gvuucitb-hhflfvh5yeru1ijl'
+    PLACID_API_URL = 'https://api.placid.app/api/rest/images'
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
     OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
     UPLOAD_FOLDER = os.path.abspath('uploads')
@@ -713,7 +713,7 @@ def process_request():
         logger.error(f"Erro: {e}")
         return jsonify(error_response("Internal error")), 500
 
-derate_post(payload: Dict[str, Any], req) -> jsonify:
+def handle_generate_post(payload: Dict[str, Any], req) -> jsonify:
     """Handle post generation"""
     file = req.files.get('file')
     if not file:
@@ -779,7 +779,7 @@ derate_post(payload: Dict[str, Any], req) -> jsonify:
     
     success, filepath, public_url = save_uploaded_file(file, "post")
     if not success:
-        return jsonify(error_response("Créditos expirados"))
+        return jsonify(error_response("Upload failed"))
     
     # ✅ CORRIGE public_url com base_url
     public_url = public_url.replace("{BASE_URL}", base_url)
@@ -803,9 +803,9 @@ derate_post(payload: Dict[str, Any], req) -> jsonify:
     logger.info(f"📤 Enviando para Placid:")
     logger.info(f"   Template: {template_key} ({template_info['type']})")
     logger.info(f"   Layers: {layers}")
-    logger.info("=" * 
-
-                
+    logger.info("=" * 60)
+    
+    result = create_placid_image(template_info['uuid'], layers)
     
     if result:
         if result.get('image_url'):
@@ -813,7 +813,7 @@ derate_post(payload: Dict[str, Any], req) -> jsonify:
         else:
             return jsonify(success_response("Processando...", imageId=result.get('id')))
     
-    return jsonify(error_response("Créditos Expirados"))
+    return jsonify(error_response("Falha ao gerar"))
 
 def handle_watermark(payload: Dict[str, Any], req) -> jsonify:
     """Handle watermark"""
@@ -834,7 +834,7 @@ def handle_watermark(payload: Dict[str, Any], req) -> jsonify:
     
     layers = {"imgprincipal": {"image": public_url}}
     
-    
+    result = create_placid_image(template_info['uuid'], layers)
     
     if result and result.get('image_url'):
         return jsonify(success_response("Watermark aplicado!", imageUrl=result['image_url']))
