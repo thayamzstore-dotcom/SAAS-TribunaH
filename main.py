@@ -796,8 +796,7 @@ def handle_generate_post(payload: Dict[str, Any], req) -> jsonify:
         if subject:
             layers["assuntext"] = {"text": subject}
         if credits:
-            layers["creditfoto"] = {"text": f" {credits}"}
-    
+            layers["creditfoto"] = {"text": credits}
     # 🐛 DEBUG: Ver o que está sendo enviado
     logger.info("=" * 60)
     logger.info(f"📤 Enviando para Placid:")
