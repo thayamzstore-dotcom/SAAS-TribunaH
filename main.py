@@ -722,7 +722,7 @@ def handle_generate_post(payload: Dict[str, Any], req) -> jsonify:
     template_key = payload.get('template', 'feed_1')
     title = payload.get('title', '')
     subject = payload.get('subject', '')
-    credits = payload.get('credentials', '')
+    credits = payload.get('credits', '')
     
     # ✅ CAPTURA base_url ANTES de qualquer operação
     base_url = req.url_root
