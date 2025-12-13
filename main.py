@@ -2000,7 +2000,8 @@ HTML_TEMPLATE += """
                 title: titulo,
                 subject: assunto,
                 credits: creditos
-            }, uploadedFiles.post);
+            console.log('📤 Enviando para API:', { template: selectedTemplate, title: titulo, subject: assunto, credits: creditos });
+}, uploadedFiles.post);
 
             hideLoading('post');
             
