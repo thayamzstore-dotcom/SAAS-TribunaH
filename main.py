@@ -784,35 +784,41 @@ def handle_generate_post(payload: Dict[str, Any], req) -> jsonify:
     # ✅ CORRIGE public_url com base_url
     public_url = public_url.replace("{BASE_URL}", base_url)
     
-    layers = {"imgprincipal": {"image": public_url}}
+layers = {"imgprincipal": {"image": public_url}}
+
+# ✅ Título
+if template_info['type'] in ['feed', 'watermark', 'story'] and title:
+    layers["titulocopy"] = {"text": title}
+    logger.info(f"✅ Título '{title}' adicionado")
+
+# ✅ FEED - TESTE FORÇADO
+if template_info['type'] == 'feed':
+    # SEMPRE envia assunto e créditos (mesmo se vazio)
+    layers["assuntext"] = {"text": subject if subject else "TESTE ASSUNTO"}
+    layers["creditfoto"] = {"text": credits if credits else "TESTE CREDITOS"}
     
-    # ✅ CORRIGIDO: Stories também recebe o título
-    if template_info['type'] in ['feed', 'watermark', 'story'] and title:
-        layers["titulocopy"] = {"text": title}
-        logger.info(f"✅ Título '{title}' adicionado para tipo '{template_info['type']}'")
-    
-    # Campos específicos do Feed
-    if template_info['type'] == 'feed':
-        if subject:
-            layers["assuntext"] = {"text": subject}
-        if credits:
-            layers["creditfoto"] = {"text": f" {credits}"}
-    # 🐛 DEBUG: Ver o que está sendo enviado
-    logger.info("=" * 60)
-    logger.info(f"📤 Enviando para Placid:")
-    logger.info(f"   Template: {template_key} ({template_info['type']})")
-    logger.info(f"   Layers: {layers}")
-    logger.info("=" * 60)
-    
-    result = create_placid_image(template_info['uuid'], layers)
-    
-    if result:
-        if result.get('image_url'):
-            return jsonify(success_response("Post gerado!", imageUrl=result['image_url']))
-        else:
-            return jsonify(success_response("Processando...", imageId=result.get('id')))
-    
-    return jsonify(error_response("Falha ao gerar"))
+    logger.info(f"🔍 DEBUG FORÇADO:")
+    logger.info(f"   subject recebido: '{subject}'")
+    logger.info(f"   credits recebido: '{credits}'")
+    logger.info(f"   assuntext enviado: '{layers.get('assuntext', {}).get('text')}'")
+    logger.info(f"   creditfoto enviado: '{layers.get('creditfoto', {}).get('text')}'")
+
+# 🐛 DEBUG: Ver payload completo
+logger.info("=" * 60)
+logger.info(f"📤 PAYLOAD COMPLETO PARA PLACID:")
+logger.info(f"   Template UUID: {template_info['uuid']}")
+logger.info(f"   Layers: {json.dumps(layers, indent=2)}")
+logger.info("=" * 60)
+
+result = create_placid_image(template_info['uuid'], layers)
+
+if result:
+    if result.get('image_url'):
+        return jsonify(success_response("Post gerado!", imageUrl=result['image_url']))
+    else:
+        return jsonify(success_response("Processando...", imageId=result.get('id')))
+
+return jsonify(error_response("Falha ao gerar"))
 
 def handle_watermark(payload: Dict[str, Any], req) -> jsonify:
     """Handle watermark"""
