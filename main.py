@@ -325,214 +325,91 @@ def error_response(message: str, **kwargs):
 
 def generate_local_reels_video(source_media_path: str, title_text: str, template_key: str) -> Optional[Tuple[str, str]]:
     """
-    Gera vídeo de reels SEM PERDER QUALIDADE
+    VERSÃO SIMPLES: Apenas cola o vídeo no template SEM alterar qualidade
     """
     if mpe is None:
-        logger.error("❌ MoviePy não está disponível")
+        logger.error("❌ MoviePy não disponível")
         return None
     
-    logger.info("🎬 Iniciando geração de Reels...")
-    
-    # ✅ NÃO converte vídeos (mantém original)
-    logger.info(f"📁 Usando vídeo original: {source_media_path}")
+    logger.info("🎬 Gerando Reels (modo simples)...")
     
     try:
         from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip
         
-        if template_key not in LOCAL_REELS_TEMPLATES:
-            logger.error(f"Template não encontrado: {template_key}")
-            return None
-        
-        template = LOCAL_REELS_TEMPLATES[template_key]
-        width, height = 1080, 1920
-        
-        # Carrega o vídeo ORIGINAL
-        clip = None
-        try:
-            clip = mpe.VideoFileClip(source_media_path)
-            logger.info(f"✅ Vídeo carregado: {clip.w}x{clip.h}, {clip.duration}s")
-        except Exception:
-            # Se for imagem, converte para vídeo de 5s
-            logger.info("📸 Convertendo imagem para vídeo...")
-            with Image.open(source_media_path) as img:
-                img = img.convert('RGB')
-                temp_img = generate_filename("reels_from_image", "png")
-                temp_path = os.path.join(Config.UPLOAD_FOLDER, temp_img)
-                img.save(temp_path, format='PNG')
-            clip = mpe.ImageClip(temp_path).set_duration(5).set_fps(30)
-        
         # Template de fundo
         if template_key == 'reels_modelo_2':
-            template_bg_path = os.path.join(os.path.dirname(__file__), "template2.jpg")
+            template_bg = os.path.join(os.path.dirname(__file__), "template2.jpg")
         else:
-            template_bg_path = os.path.join(os.path.dirname(__file__), "template1.jpg")
+            template_bg = os.path.join(os.path.dirname(__file__), "template1.jpg")
         
-        if not os.path.exists(template_bg_path):
-            logger.error(f"Template não encontrado: {template_bg_path}")
+        if not os.path.exists(template_bg):
+            logger.error("❌ Template não encontrado")
             return None
         
-        bg = mpe.ImageClip(template_bg_path).set_duration(clip.duration).resize((width, height))
+        # Carrega vídeo original
+        try:
+            clip = mpe.VideoFileClip(source_media_path)
+            logger.info(f"✅ Vídeo: {clip.w}x{clip.h}, {clip.duration}s, {clip.fps} fps")
+        except:
+            # Se for imagem
+            with Image.open(source_media_path) as img:
+                img = img.convert('RGB')
+                temp = generate_filename("temp_img", "png")
+                temp_path = os.path.join(Config.UPLOAD_FOLDER, temp)
+                img.save(temp_path)
+            clip = mpe.ImageClip(temp_path).set_duration(5).set_fps(30)
         
-        # ✅ MANTÉM TAMANHO ORIGINAL DO VÍDEO (NÃO REDIMENSIONA!)
-        video_original_width = clip.w
-        video_original_height = clip.h
+        # Fundo 1080x1920
+        bg = mpe.ImageClip(template_bg).set_duration(clip.duration).resize((1080, 1920))
         
-        logger.info(f"📐 Vídeo ORIGINAL: {video_original_width}x{video_original_height}")
-        
-        # Área disponível
-        video_area_top = 400
-        video_area_bottom = 1520
-        video_area_height = video_area_bottom - video_area_top
-        
-        # ✅ Centraliza (SEM redimensionar!)
-        video_x = (width - video_original_width) // 2
-        video_y = video_area_top + (video_area_height - video_original_height) // 2
-        
-        logger.info(f"📍 Posição: X={video_x}, Y={video_y}")
-        logger.info("✅ Vídeo NÃO foi redimensionado - qualidade ORIGINAL mantida!")
+        # ✅ POSICIONA O VÍDEO ORIGINAL (SEM REDIMENSIONAR!)
+        video_x = (1080 - clip.w) // 2
+        video_y = 400 + ((1520 - 400) - clip.h) // 2
         
         positioned_video = clip.set_position((video_x, video_y))
         
-        # Cria título
-        title_clip = None
-        if title_text and title_text.strip():
-            try:
-                if template_key == 'reels_modelo_2':
-                    canvas_height = 250
-                    font_size = 51
-                    line_height = 70
-                    text_align = 'left'
-                    margin_left = 90
-                    title_y_position = video_area_top - 7
-                else:
-                    canvas_height = 400
-                    font_size = 50
-                    line_height = 70
-                    text_align = 'center'
-                    margin_left = 60
-                    title_y_position = video_area_top - 62
-                
-                title_img = Image.new('RGBA', (width, canvas_height), (0, 0, 0, 0))
-                draw = ImageDraw.Draw(title_img)
-                
-                font = None
-                for font_name in ["Oswald-Bold.ttf", "arialbd.ttf", "Arial.ttf"]:
-                    try:
-                        font = ImageFont.truetype(font_name, font_size)
-                        break
-                    except:
-                        continue
-                
-                if font is None:
-                    font = ImageFont.load_default()
-                
-                text = title_text.upper().strip()
-                max_width = width - (margin_left * 2)
-                
-                words = text.split()
-                lines = []
-                current_line = []
-                
-                for word in words:
-                    test_line = ' '.join(current_line + [word])
-                    bbox = draw.textbbox((0, 0), test_line, font=font)
-                    text_width = bbox[2] - bbox[0]
-                    
-                    if text_width <= max_width:
-                        current_line.append(word)
-                    else:
-                        if current_line:
-                            lines.append(' '.join(current_line))
-                            current_line = [word]
-                        else:
-                            lines.append(word)
-                
-                if current_line:
-                    lines.append(' '.join(current_line))
-                
-                total_height = len(lines) * line_height
-                start_y = (canvas_height - total_height) // 2
-                
-                for i, line in enumerate(lines):
-                    bbox = draw.textbbox((0, 0), line, font=font)
-                    text_width = bbox[2] - bbox[0]
-                    
-                    x = margin_left if text_align == 'left' else (width - text_width) // 2
-                    y = start_y + i * line_height
-                    draw.text((x, y), line, font=font, fill=(255, 255, 255, 255))
-                
-                title_filename = generate_filename("title_overlay", "png")
-                title_path = os.path.join(Config.UPLOAD_FOLDER, title_filename)
-                title_img.save(title_path, format='PNG')
-                
-                title_clip = mpe.ImageClip(title_path).set_duration(clip.duration).set_position((0, title_y_position))
-                logger.info("✅ Título criado")
-                
-            except Exception as e:
-                logger.error(f"Erro no título: {e}")
+        logger.info(f"📍 Vídeo colado em: X={video_x}, Y={video_y}")
+        logger.info(f"✅ SEM redimensionamento - mantém {clip.w}x{clip.h}")
         
-        # Composição
-        clips_to_compose = [bg, positioned_video]
-        if title_clip:
-            clips_to_compose.append(title_clip)
-        
-        composed = mpe.CompositeVideoClip(clips_to_compose)
+        # Compõe: fundo + vídeo original
+        final = mpe.CompositeVideoClip([bg, positioned_video])
         
         # Preserva áudio
-        try:
-            if hasattr(clip, 'audio') and clip.audio:
-                composed = composed.set_audio(clip.audio)
-        except:
-            pass
+        if hasattr(clip, 'audio') and clip.audio:
+            final = final.set_audio(clip.audio)
         
-        # Exporta com QUALIDADE MÁXIMA
-        out_filename = generate_filename(template_key, "mp4")
-        out_path = os.path.join(Config.UPLOAD_FOLDER, out_filename)
+        # Exporta
+        out_file = generate_filename(template_key, "mp4")
+        out_path = os.path.join(Config.UPLOAD_FOLDER, out_file)
         
-        fps = 30
-        try:
-            original_fps = getattr(clip, 'fps', 30)
-            if original_fps:
-                fps = int(original_fps)
-                fps = min(max(fps, 24), 60)
-        except:
-            fps = 30
+        # ✅ USA FPS ORIGINAL
+        original_fps = int(clip.fps) if clip.fps else 30
         
-        logger.info(f"🎬 Exportando: {fps} FPS com QUALIDADE MÁXIMA")
+        logger.info(f"💾 Exportando: {original_fps} fps, CRF 18, 10 Mbps")
         
-        composed.write_videofile(
+        final.write_videofile(
             out_path,
-            fps=fps,
+            fps=original_fps,           # ✅ FPS original
             codec='libx264',
             audio_codec='aac',
-            threads=4,
-            preset='medium',              # ✅ Equilíbrio perfeito
-            verbose=False,
-            logger=None,
-            bitrate='10000k',             # ✅ 10 Mbps (alta qualidade)
+            preset='medium',
+            bitrate='10000k',
             audio_bitrate='256k',
             ffmpeg_params=[
-                '-crf', '18',             # ✅ Qualidade quase lossless
-                '-pix_fmt', 'yuv420p',
-                '-movflags', '+faststart',
-                '-profile:v', 'high',
-                '-level', '4.2'
-            ]
+                '-crf', '18',           # Qualidade alta
+                '-pix_fmt', 'yuv420p'
+            ],
+            verbose=False,
+            logger=None
         )
         
-        logger.info("✅ Vídeo exportado com QUALIDADE MÁXIMA!")
+        logger.info("✅ Vídeo gerado SEM perda de qualidade!")
         
         # Cleanup
-        try:
-            clip.close()
-            if title_clip:
-                title_clip.close()
-            composed.close()
-        except:
-            pass
+        clip.close()
+        final.close()
         
-        public_url = f"{request.url_root}uploads/{out_filename}"
-        return out_path, public_url
+        return out_path, f"{request.url_root}uploads/{out_file}"
         
     except Exception as e:
         logger.error(f"❌ Erro: {e}")
