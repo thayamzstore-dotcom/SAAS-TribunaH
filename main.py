@@ -582,7 +582,7 @@ positioned_video = clip.set_position((video_x, video_y))
         return None
     
     finally:
-        force_close_clips(clip, resized_clip, bg, title_clip, composed)
+        force_close_clips(clip, bg, title_clip, composed)
         cleanup_files = []
         if needs_cleanup_converted and converted_path:
             cleanup_files.append(converted_path)
