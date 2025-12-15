@@ -547,11 +547,11 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
             codec='libx264',
             audio_codec='aac',
             threads=4,
-            preset='ultrafast',
+            preset='medium',
             verbose=False,
             logger=None,
-            bitrate='800k',
-            audio_bitrate='96k'
+            bitrate='5000k',
+            audio_bitrate='192k'
         )
         
         if base_url:
