@@ -395,27 +395,31 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
             return None
         
         bg = mpe.ImageClip(template_bg_path).set_duration(clip.duration).resize((width, height))
-        
         if task_id:
-            update_reels_progress(task_id, 'resize', 55, 'Redimensionando...')
+    update_reels_progress(task_id, 'resize', 55, 'Posicionando vídeo...')
+
+# ✅ MANTÉM TAMANHO ORIGINAL - NÃO REDIMENSIONA
+video_original_width = clip.w
+video_original_height = clip.h
+
+logger.info(f"📐 Vídeo original: {video_original_width}x{video_original_height}")
+
+# Área disponível no template
+video_area_top = 400
+video_area_bottom = 1520
+video_area_height = video_area_bottom - video_area_top
+
+# ✅ Centraliza horizontalmente
+video_x = (width - video_original_width) // 2
+
+# ✅ Centraliza verticalmente na área do template
+video_y = video_area_top + (video_area_height - video_original_height) // 2
+
+logger.info(f"📍 Posição final: X={video_x}, Y={video_y}")
+
+# ✅ USA O CLIP ORIGINAL (sem redimensionar!)
+positioned_video = clip.set_position((video_x, video_y))
         
-        video_area_top = 400
-        video_area_bottom = 1520
-        video_area_height = video_area_bottom - video_area_top
-        video_target_width = width
-        
-        original_aspect_ratio = clip.w / clip.h
-        video_target_height = int(video_target_width / original_aspect_ratio)
-        
-        if video_target_height > video_area_height:
-            video_target_height = video_area_height
-            video_target_width = int(video_target_height * original_aspect_ratio)
-        
-        resized_clip = clip.resize(newsize=(video_target_width, video_target_height))
-        
-        video_x = (width - video_target_width) // 2
-        video_y = video_area_top + (video_area_height - video_target_height) // 2
-        positioned_video = resized_clip.set_position((video_x, video_y))
         
         if task_id:
             update_reels_progress(task_id, 'title', 70, 'Criando título...')
