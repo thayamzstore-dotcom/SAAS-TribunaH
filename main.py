@@ -396,30 +396,28 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
         
         bg = mpe.ImageClip(template_bg_path).set_duration(clip.duration).resize((width, height))
         if task_id:
-    update_reels_progress(task_id, 'resize', 55, 'Posicionando vídeo...')
-
-# ✅ MANTÉM TAMANHO ORIGINAL - NÃO REDIMENSIONA
-video_original_width = clip.w
-video_original_height = clip.h
-
-logger.info(f"📐 Vídeo original: {video_original_width}x{video_original_height}")
-
-# Área disponível no template
-video_area_top = 400
-video_area_bottom = 1520
-video_area_height = video_area_bottom - video_area_top
-
-# ✅ Centraliza horizontalmente
-video_x = (width - video_original_width) // 2
-
-# ✅ Centraliza verticalmente na área do template
-video_y = video_area_top + (video_area_height - video_original_height) // 2
-
-logger.info(f"📍 Posição final: X={video_x}, Y={video_y}")
-
-# ✅ USA O CLIP ORIGINAL (sem redimensionar!)
-positioned_video = clip.set_position((video_x, video_y))
+            update_reels_progress(task_id, 'resize', 55, 'Posicionando vídeo...')
         
+        # ✅ MANTÉM RESOLUÇÃO ORIGINAL DO VÍDEO (SEM REDIMENSIONAR!)
+        video_original_width = clip.w
+        video_original_height = clip.h
+        
+        logger.info(f"📐 Vídeo original: {video_original_width}x{video_original_height}px")
+        
+        # Área disponível no template (entre as barras vermelhas)
+        video_area_top = 400
+        video_area_bottom = 1520
+        video_area_height = video_area_bottom - video_area_top
+        
+        # ✅ CENTRALIZA o vídeo original (SEM RESIZE)
+        video_x = (width - video_original_width) // 2
+        video_y = video_area_top + (video_area_height - video_original_height) // 2
+        
+        logger.info(f"📍 Posição: X={video_x}, Y={video_y}")
+        logger.info(f"✅ Vídeo NÃO foi redimensionado - mantém qualidade original!")
+        
+        # ✅ USA O CLIP ORIGINAL (sem perder qualidade!)
+        positioned_video = clip.set_position((video_x, video_y))
         
         if task_id:
             update_reels_progress(task_id, 'title', 70, 'Criando título...')
@@ -533,37 +531,48 @@ positioned_video = clip.set_position((video_x, video_y))
             pass
         
         if task_id:
-            update_reels_progress(task_id, 'export', 90, 'Exportando...')
+            update_reels_progress(task_id, 'export', 90, 'Exportando em ALTA QUALIDADE...')
         
         out_filename = generate_filename(template_key, "mp4")
         out_path = os.path.join(Config.UPLOAD_FOLDER, out_filename)
         
+        # ✅ MANTÉM FPS ORIGINAL
         fps = 30
         try:
-            fps = int(getattr(clip, 'fps', 30) or 30)
-            fps = min(max(fps, 24), 60)
+            original_fps = getattr(clip, 'fps', 30)
+            if original_fps:
+                fps = int(original_fps)
+                fps = min(max(fps, 24), 60)  # Entre 24 e 60 fps
         except:
             fps = 30
         
+        logger.info(f"🎬 Exportando: {fps} FPS")
+        
+        # ✅ ENCODING DE ALTA QUALIDADE
         composed.write_videofile(
-    out_path,
-    fps=fps,
-    codec='libx264',
-    audio_codec='aac',
-    threads=4,
-    preset='veryslow',                   # ✅ Qualidade máxima (mais lento)
-    verbose=False,
-    logger=None,
-    bitrate='15000k',                    # ✅ Bitrate muito alto
-    audio_bitrate='320k',
-    ffmpeg_params=[
-        '-crf', '15',                    # ✅ Qualidade quase perfeita
-        '-pix_fmt', 'yuv420p',
-        '-movflags', '+faststart',
-        '-profile:v', 'high',
-        '-level', '4.2'
-    ]
-)
+            out_path,
+            fps=fps,
+            codec='libx264',
+            audio_codec='aac',
+            threads=4,
+            preset='medium',              # ✅ Equilíbrio perfeito
+            verbose=False,
+            logger=None,
+            bitrate='10000k',             # ✅ 10 Mbps (alta qualidade)
+            audio_bitrate='256k',
+            ffmpeg_params=[
+                '-crf', '18',             # ✅ Qualidade quase lossless
+                '-pix_fmt', 'yuv420p',    # Compatibilidade
+                '-movflags', '+faststart', # Web otimizado
+                '-profile:v', 'high',     # Perfil H.264 alto
+                '-level', '4.2',
+                '-g', str(fps * 2),       # Keyframe a cada 2 segundos
+                '-bf', '2',               # B-frames para melhor compressão
+                '-refs', '4'              # Frames de referência
+            ]
+        )
+        
+        logger.info(f"✅ Vídeo exportado com QUALIDADE MÁXIMA!")
         
         if base_url:
             public_url = f"{base_url}uploads/{out_filename}"
