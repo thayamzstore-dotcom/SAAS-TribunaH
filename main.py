@@ -542,17 +542,24 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
             fps = 30
         
         composed.write_videofile(
-            out_path,
-            fps=fps,
-            codec='libx264',
-            audio_codec='aac',
-            threads=4,
-            preset='slow',
-            verbose=False,
-            logger=None,
-            bitrate='5000k',
-            audio_bitrate='192k'
-        )
+    out_path,
+    fps=fps,
+    codec='libx264',
+    audio_codec='aac',
+    threads=4,
+    preset='veryslow',                   # ✅ Qualidade máxima (mais lento)
+    verbose=False,
+    logger=None,
+    bitrate='15000k',                    # ✅ Bitrate muito alto
+    audio_bitrate='320k',
+    ffmpeg_params=[
+        '-crf', '15',                    # ✅ Qualidade quase perfeita
+        '-pix_fmt', 'yuv420p',
+        '-movflags', '+faststart',
+        '-profile:v', 'high',
+        '-level', '4.2'
+    ]
+)
         
         if base_url:
             public_url = f"{base_url}uploads/{out_filename}"
