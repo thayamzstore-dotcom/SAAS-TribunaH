@@ -323,51 +323,30 @@ def error_response(message: str, **kwargs):
     response.update(kwargs)
     return response
 
-def generate_local_reels_video(source_media_path: str, title_text: str, template_key: str, task_id: str = None, base_url: str = None) -> Optional[Tuple[str, str]]:
+def generate_local_reels_video(source_media_path: str, title_text: str, template_key: str) -> Optional[Tuple[str, str]]:
     """
-    Gera vídeo de reels MANTENDO QUALIDADE ORIGINAL
+    Gera um vídeo de reels usando template de fundo.
+    O vídeo agora preenche toda a LARGURA do template (1080px).
     """
     if mpe is None:
-        logger.error("❌ MoviePy não disponível")
-        if task_id:
-            error_reels_progress(task_id, "MoviePy não disponível")
+        logger.error("MoviePy não está disponível")
         return None
     
-    logger.info("🎬 Gerando Reels...")
+    if template_key not in LOCAL_REELS_TEMPLATES:
+        logger.error(f"Template não encontrado: {template_key}")
+        return None
     
-    clip = None
-    bg = None
-    title_clip = None
-    composed = None
-    converted_path = None
-    needs_cleanup_converted = False
-    title_overlay_path = None
+    template = LOCAL_REELS_TEMPLATES[template_key]
     
     try:
-        from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip
+        width, height = template['dimensions']['width'], template['dimensions']['height']
+        logger.info(f"Gerando reels: {width}x{height}")
         
-        if task_id:
-            update_reels_progress(task_id, 'init', 5, 'Inicializando...')
-        
-        # Template de fundo
-        if template_key == 'reels_modelo_2':
-            template_bg = os.path.join(os.path.dirname(__file__), "template2.jpg")
-        else:
-            template_bg = os.path.join(os.path.dirname(__file__), "template1.jpg")
-        
-        if not os.path.exists(template_bg):
-            logger.error("❌ Template não encontrado")
-            if task_id:
-                error_reels_progress(task_id, "Template não encontrado")
-            return None
-        
-        if task_id:
-            update_reels_progress(task_id, 'load', 15, 'Carregando vídeo...')
-        
-        # Carrega vídeo ORIGINAL (SEM converter!)
+        # Carrega vídeo
+        clip = None
         try:
             clip = mpe.VideoFileClip(source_media_path)
-            logger.info(f"✅ Vídeo: {clip.w}x{clip.h}, {clip.duration}s, {clip.fps} fps")
+            logger.info(f"Vídeo: {clip.w}x{clip.h}, {clip.duration}s, {clip.fps} fps")
         except:
             # Se for imagem
             with Image.open(source_media_path) as img:
@@ -377,26 +356,50 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
                 img.save(temp_path)
             clip = mpe.ImageClip(temp_path).set_duration(5).set_fps(30)
         
-        if task_id:
-            update_reels_progress(task_id, 'template', 30, 'Aplicando template...')
+        # Template de fundo
+        if template_key == 'reels_modelo_2':
+            template_bg = os.path.join(os.path.dirname(__file__), "template2.jpg")
+        else:
+            template_bg = os.path.join(os.path.dirname(__file__), "template1.jpg")
+            
+        if not os.path.exists(template_bg):
+            logger.error(f"Template não encontrado: {template_bg}")
+            return None
         
-        # Fundo 1080x1920
-        bg = mpe.ImageClip(template_bg).set_duration(clip.duration).resize((1080, 1920))
+        # Fundo esticado
+        bg = mpe.ImageClip(template_bg).set_duration(clip.duration).resize((width, height))
         
-        # ✅ POSICIONA O VÍDEO ORIGINAL (SEM REDIMENSIONAR!)
-        video_x = (1080 - clip.w) // 2
-        video_y = 400 + ((1520 - 400) - clip.h) // 2
+        # ✅ NOVA LÓGICA: VÍDEO PREENCHE TODA A LARGURA
+        video_area_top = 400
+        video_area_bottom = 1520
+        video_area_height = video_area_bottom - video_area_top
         
-        positioned_video = clip.set_position((video_x, video_y))
+        # 🎯 VÍDEO OCUPA LARGURA TOTAL (1080px)
+        video_target_width = width  # 1080px
         
-        logger.info(f"📍 Vídeo colado: X={video_x}, Y={video_y}")
-        logger.info(f"✅ SEM redimensionar - mantém {clip.w}x{clip.h}")
+        # Calcula altura proporcional
+        original_aspect_ratio = clip.w / clip.h
+        video_target_height = int(video_target_width / original_aspect_ratio)
         
-        if task_id:
-            update_reels_progress(task_id, 'title', 45, 'Criando título...')
+        # Se altura calculada exceder área disponível, ajusta
+        if video_target_height > video_area_height:
+            video_target_height = video_area_height
+            video_target_width = int(video_target_height * original_aspect_ratio)
         
-        # ✅ CRIA TÍTULO SE NECESSÁRIO
-        if title_text and title_text.strip():
+        # Redimensiona vídeo
+        resized_clip = clip.resize(newsize=(video_target_width, video_target_height))
+        
+        # Centraliza vídeo na área disponível
+        video_x = (width - video_target_width) // 2
+        video_y = video_area_top + (video_area_height - video_target_height) // 2
+        positioned_video = resized_clip.set_position((video_x, video_y))
+        
+        logger.info(f"✅ Vídeo: {video_target_width}x{video_target_height}")
+        logger.info(f"✅ Posição: X={video_x}, Y={video_y}")
+
+        # Cria título
+        title_clip = None
+        if title_text:
             try:
                 if template_key == 'reels_modelo_2':
                     canvas_height = 250
@@ -404,32 +407,32 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
                     line_height = 70
                     text_align = 'left'
                     margin_left = 90
-                    title_y_position = 400 - 7
+                    title_y_position = video_area_top - 7
                 else:
                     canvas_height = 400
                     font_size = 50
                     line_height = 70
                     text_align = 'center'
                     margin_left = 60
-                    title_y_position = 400 - 62
+                    title_y_position = video_area_top - 62
                 
-                title_img = Image.new('RGBA', (1080, canvas_height), (0, 0, 0, 0))
+                title_img = Image.new('RGBA', (width, canvas_height), (0, 0, 0, 0))
                 draw = ImageDraw.Draw(title_img)
                 
+                # Carrega fonte
                 font = None
-                for font_name in ["Oswald-Bold.ttf", "arialbd.ttf", "Arial.ttf"]:
+                try:
+                    font = ImageFont.truetype("Oswald-Bold.ttf", font_size)
+                except:
                     try:
-                        font = ImageFont.truetype(font_name, font_size)
-                        break
+                        font = ImageFont.truetype("arialbd.ttf", font_size)
                     except:
-                        continue
-                
-                if font is None:
-                    font = ImageFont.load_default()
+                        font = ImageFont.load_default()
                 
                 text = title_text.upper().strip()
-                max_width = 1080 - (margin_left * 2)
+                max_width = width - (margin_left * 2)
                 
+                # Quebra texto em linhas
                 words = text.split()
                 lines = []
                 current_line = []
@@ -451,6 +454,7 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
                 if current_line:
                     lines.append(' '.join(current_line))
                 
+                # Desenha texto
                 total_height = len(lines) * line_height
                 start_y = (canvas_height - total_height) // 2
                 
@@ -458,23 +462,22 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
                     bbox = draw.textbbox((0, 0), line, font=font)
                     text_width = bbox[2] - bbox[0]
                     
-                    x = margin_left if text_align == 'left' else (1080 - text_width) // 2
+                    x = margin_left if text_align == 'left' else (width - text_width) // 2
                     y = start_y + i * line_height
                     draw.text((x, y), line, font=font, fill=(255, 255, 255, 255))
                 
+                # Salva título
                 title_filename = generate_filename("title_overlay", "png")
-                title_overlay_path = os.path.join(Config.UPLOAD_FOLDER, title_filename)
-                title_img.save(title_overlay_path, format='PNG')
+                title_path = os.path.join(Config.UPLOAD_FOLDER, title_filename)
+                title_img.save(title_path, format='PNG')
                 
-                title_clip = mpe.ImageClip(title_overlay_path).set_duration(clip.duration).set_position((0, title_y_position))
+                title_clip = mpe.ImageClip(title_path).set_duration(clip.duration).set_position((0, title_y_position))
                 logger.info("✅ Título criado")
+                
             except Exception as e:
-                logger.error(f"Erro título: {e}")
-        
-        if task_id:
-            update_reels_progress(task_id, 'compose', 60, 'Compondo vídeo...')
-        
-        # Compõe: fundo + vídeo + título
+                logger.error(f"Erro no título: {e}")
+
+        # Composição: fundo + vídeo + título
         clips_to_compose = [bg, positioned_video]
         if title_clip:
             clips_to_compose.append(title_clip)
@@ -485,51 +488,44 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
         if hasattr(clip, 'audio') and clip.audio:
             composed = composed.set_audio(clip.audio)
         
-        if task_id:
-            update_reels_progress(task_id, 'export', 70, 'Exportando com QUALIDADE MÁXIMA...')
-        
         # Exporta
-        out_file = generate_filename(template_key, "mp4")
-        out_path = os.path.join(Config.UPLOAD_FOLDER, out_file)
+        out_filename = generate_filename(template_key, "mp4")
+        out_path = os.path.join(Config.UPLOAD_FOLDER, out_filename)
         
-        # ✅ USA FPS ORIGINAL
-        original_fps = int(clip.fps) if clip.fps else 30
+        fps = int(clip.fps) if clip.fps else 30
         
-        logger.info(f"💾 Exportando: {original_fps} fps")
+        logger.info(f"💾 Exportando: {fps} fps")
         
-        # ✅ QUALIDADE MÁXIMA - IGUAL AO CÓDIGO ANTIGO
         composed.write_videofile(
             out_path,
-            fps=original_fps,
+            fps=fps,
             codec='libx264',
             audio_codec='aac',
-            threads=2,              # ✅ 2 threads (não 4!)
-            preset='medium',        # ✅ medium (não slow!)
+            threads=2,
+            preset='medium',
             verbose=False,
             logger=None
         )
         
-        logger.info("✅ Vídeo gerado SEM perda de qualidade!")
+        logger.info("✅ Vídeo gerado!")
         
-        if task_id:
-            update_reels_progress(task_id, 'completed', 100, 'Concluído!')
+        # Cleanup
+        try:
+            clip.close()
+            resized_clip.close()
+            composed.close()
+            if title_clip:
+                title_clip.close()
+        except:
+            pass
         
-        if base_url:
-            public_url = f"{base_url}uploads/{out_file}"
-        else:
-            public_url = f"/uploads/{out_file}"
-        
-        if task_id:
-            complete_reels_progress(task_id, public_url)
-        
+        public_url = f"{request.url_root}uploads/{out_filename}"
         return out_path, public_url
         
     except Exception as e:
         logger.error(f"❌ Erro: {e}")
         import traceback
         logger.error(traceback.format_exc())
-        if task_id:
-            error_reels_progress(task_id, str(e))
         return None
     
     finally:
