@@ -747,7 +747,7 @@ def handle_generate_post(payload: Dict[str, Any], req) -> jsonify:
     # ✅ CORRIGE public_url com base_url
     public_url = public_url.replace("{BASE_URL}", base_url)
     
-layers = {"imgprincipal": {"image": public_url}}
+    layers = {"imgprincipal": {"image": public_url}}
 
     # ✅ Título
     if template_info['type'] in ['feed', 'watermark', 'story'] and title:
