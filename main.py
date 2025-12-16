@@ -687,7 +687,7 @@ def handle_generate_post(payload: Dict[str, Any], req) -> jsonify:
     subject = payload.get('subject', '')
     credits = payload.get('credits', '')
     
-    # ✅ CAPTURA base_url ANTES de qualquer operação
+    # ✅ CAPTURA base_url
     base_url = req.url_root
     
     # Capa de Jornal
@@ -734,7 +734,7 @@ def handle_generate_post(payload: Dict[str, Any], req) -> jsonify:
             progressUrl=f"/api/reels-progress/{task_id}"
         ))
     
-    # Templates Placid normais (Stories, Feed, Watermark)
+    # Templates Placid (Stories, Feed, Watermark)
     if template_key not in PLACID_TEMPLATES:
         template_key = 'feed_1'
     
@@ -744,46 +744,36 @@ def handle_generate_post(payload: Dict[str, Any], req) -> jsonify:
     if not success:
         return jsonify(error_response("Upload failed"))
     
-    # ✅ CORRIGE public_url com base_url
+    # ✅ CORRIGE public_url
     public_url = public_url.replace("{BASE_URL}", base_url)
     
+    # ✅ MONTA LAYERS
     layers = {"imgprincipal": {"image": public_url}}
-
-    # ✅ Título
-    if template_info['type'] in ['feed', 'watermark', 'story'] and title:
-    layers["titulocopy"] = {"text": title}
-    logger.info(f"✅ Título '{title}' adicionado")
-
-    # ✅ FEED - TESTE FORÇADO
-    if template_info['type'] == 'feed':
-    # SEMPRE envia assunto e créditos (mesmo se vazio)
-    layers["assuntext"] = {"text": subject if subject else "TESTE ASSUNTO"}
-    layers["creditfoto"] = {"text": credits if credits else "TESTE CREDITOS"}
     
-    logger.info(f"🔍 DEBUG FORÇADO:")
-    logger.info(f"   subject recebido: '{subject}'")
-    logger.info(f"   credits recebido: '{credits}'")
-    logger.info(f"   assuntext enviado: '{layers.get('assuntext', {}).get('text')}'")
-    logger.info(f"   creditfoto enviado: '{layers.get('creditfoto', {}).get('text')}'")
-
-    # 🐛 DEBUG: Ver payload completo
-    logger.info("=" * 60)
-    logger.info(f"📤 PAYLOAD COMPLETO PARA PLACID:")
-    logger.info(f"   Template UUID: {template_info['uuid']}")
-    logger.info(f"   Layers: {json.dumps(layers, indent=2)}")
-    logger.info("=" * 60)
-
+    # Título
+    if template_info['type'] in ['feed', 'watermark', 'story'] and title:
+        layers["titulocopy"] = {"text": title}
+    
+    # Feed: assunto e créditos
+    if template_info['type'] == 'feed':
+        if subject:
+            layers["assuntext"] = {"text": subject}
+        if credits:
+            layers["creditfoto"] = {"text": f" {credits}"}
+    
+    logger.info(f"📤 Layers: {layers}")
+    
     result = create_placid_image(template_info['uuid'], layers)
-
+    
     if result:
         if result.get('image_url'):
             return jsonify(success_response("Post gerado!", imageUrl=result['image_url']))
-    else:
+        else:
             return jsonify(success_response("Processando...", imageId=result.get('id')))
-
+    
     return jsonify(error_response("Falha ao gerar"))
 
-    def handle_watermark(payload: Dict[str, Any], req) -> jsonify:
+def handle_watermark(payload: Dict[str, Any], req) -> jsonify:
     """Handle watermark"""
     file = req.files.get('file')
     if not file:
