@@ -776,10 +776,10 @@ def handle_generate_post(payload: Dict[str, Any], req) -> jsonify:
     result = create_placid_image(template_info['uuid'], layers)
 
     if result:
-    if result.get('image_url'):
-        return jsonify(success_response("Post gerado!", imageUrl=result['image_url']))
+        if result.get('image_url'):
+            return jsonify(success_response("Post gerado!", imageUrl=result['image_url']))
     else:
-        return jsonify(success_response("Processando...", imageId=result.get('id')))
+            return jsonify(success_response("Processando...", imageId=result.get('id')))
 
     return jsonify(error_response("Falha ao gerar"))
 
