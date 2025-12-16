@@ -749,13 +749,13 @@ def handle_generate_post(payload: Dict[str, Any], req) -> jsonify:
     
 layers = {"imgprincipal": {"image": public_url}}
 
-# ✅ Título
-if template_info['type'] in ['feed', 'watermark', 'story'] and title:
+    # ✅ Título
+    if template_info['type'] in ['feed', 'watermark', 'story'] and title:
     layers["titulocopy"] = {"text": title}
     logger.info(f"✅ Título '{title}' adicionado")
 
-# ✅ FEED - TESTE FORÇADO
-if template_info['type'] == 'feed':
+    # ✅ FEED - TESTE FORÇADO
+    if template_info['type'] == 'feed':
     # SEMPRE envia assunto e créditos (mesmo se vazio)
     layers["assuntext"] = {"text": subject if subject else "TESTE ASSUNTO"}
     layers["creditfoto"] = {"text": credits if credits else "TESTE CREDITOS"}
@@ -766,24 +766,24 @@ if template_info['type'] == 'feed':
     logger.info(f"   assuntext enviado: '{layers.get('assuntext', {}).get('text')}'")
     logger.info(f"   creditfoto enviado: '{layers.get('creditfoto', {}).get('text')}'")
 
-# 🐛 DEBUG: Ver payload completo
-logger.info("=" * 60)
-logger.info(f"📤 PAYLOAD COMPLETO PARA PLACID:")
-logger.info(f"   Template UUID: {template_info['uuid']}")
-logger.info(f"   Layers: {json.dumps(layers, indent=2)}")
-logger.info("=" * 60)
+    # 🐛 DEBUG: Ver payload completo
+    logger.info("=" * 60)
+    logger.info(f"📤 PAYLOAD COMPLETO PARA PLACID:")
+    logger.info(f"   Template UUID: {template_info['uuid']}")
+    logger.info(f"   Layers: {json.dumps(layers, indent=2)}")
+    logger.info("=" * 60)
 
-result = create_placid_image(template_info['uuid'], layers)
+    result = create_placid_image(template_info['uuid'], layers)
 
-if result:
+    if result:
     if result.get('image_url'):
         return jsonify(success_response("Post gerado!", imageUrl=result['image_url']))
     else:
         return jsonify(success_response("Processando...", imageId=result.get('id')))
 
-return jsonify(error_response("Falha ao gerar"))
+    return jsonify(error_response("Falha ao gerar"))
 
-def handle_watermark(payload: Dict[str, Any], req) -> jsonify:
+    def handle_watermark(payload: Dict[str, Any], req) -> jsonify:
     """Handle watermark"""
     file = req.files.get('file')
     if not file:
