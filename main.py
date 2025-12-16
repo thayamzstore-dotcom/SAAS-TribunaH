@@ -1957,14 +1957,14 @@ HTML_TEMPLATE += """
             }
 
             showLoading('post');
-            
             const apiResult = await sendToAPI('generate_post', {
-                template: selectedTemplate,
-                title: titulo,
-                subject: assunto,
-                credits: creditos
-            console.log('📤 Enviando para API:', { template: selectedTemplate, title: titulo, subject: assunto, credits: creditos });
+    template: selectedTemplate,
+    title: titulo,
+    subject: assunto,
+    credits: creditos
 }, uploadedFiles.post);
+
+console.log('📤 Enviando para API:', { template: selectedTemplate, title: titulo, subject: assunto, credits: creditos });
 
             hideLoading('post');
             
