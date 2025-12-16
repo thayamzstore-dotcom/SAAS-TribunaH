@@ -561,18 +561,32 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
         aggressive_cleanup()
 
 def generate_local_capa_jornal(source_media_path: str, base_url: str = None) -> Optional[Tuple[str, str]]:
-    """Gera capa de jornal"""
+    """Gera capa de jornal com imagem redimensionada e reposicionada"""
     try:
         template_bg = os.path.join(os.path.dirname(__file__), "template_capa_jornal.jpg")
         if not os.path.exists(template_bg):
+            logger.error("Template capa_jornal não encontrado")
             return None
         
         background = Image.open(template_bg).convert('RGB')
         
         with Image.open(source_media_path) as user_img:
             user_img = user_img.convert('RGB')
-            user_img_resized = user_img.resize((970, 1300), Image.LANCZOS)
-            background.paste(user_img_resized, (30, 12))
+            
+            # ✅ AJUSTE 1: REDUZ O TAMANHO (de 970x1300 para 850x1150)
+            new_width = 850   # Antes: 970px (redução de ~12%)
+            new_height = 1150  # Antes: 1300px (redução de ~11%)
+            
+            user_img_resized = user_img.resize((new_width, new_height), Image.LANCZOS)
+            
+            # ✅ AJUSTE 2: POSICIONA MAIS À DIREITA E MAIS ABAIXO
+            # Antes: (30, 12) - agora move para direita e desce um pouco
+            x_position = 120  # Antes: 30px (move 90px para direita)
+            y_position = 80   # Antes: 12px (desce 68px)
+            
+            background.paste(user_img_resized, (x_position, y_position))
+            
+            logger.info(f"✅ Capa: imagem {new_width}x{new_height} colada em ({x_position}, {y_position})")
         
         out_filename = generate_filename("capa_jornal", "png")
         out_path = os.path.join(Config.UPLOAD_FOLDER, out_filename)
@@ -583,10 +597,15 @@ def generate_local_capa_jornal(source_media_path: str, base_url: str = None) -> 
         else:
             public_url = f"/uploads/{out_filename}"
         
+        logger.info(f"✅ Capa gerada: {public_url}")
         return out_path, public_url
+        
     except Exception as e:
         logger.error(f"Erro capa: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return None
+        
 # ✅ ROTA SSE COM HEARTBEAT
 @app.route('/api/reels-progress/<task_id>')
 def reels_progress_stream(task_id):
