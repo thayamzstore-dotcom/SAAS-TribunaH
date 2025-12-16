@@ -323,27 +323,40 @@ def error_response(message: str, **kwargs):
     response.update(kwargs)
     return response
 
-def generate_local_reels_video(source_media_path: str, title_text: str, template_key: str) -> Optional[Tuple[str, str]]:
+def generate_local_reels_video(source_media_path: str, title_text: str, template_key: str, task_id: str = None, base_url: str = None) -> Optional[Tuple[str, str]]:
     """
     Gera um vídeo de reels usando template de fundo.
     O vídeo agora preenche toda a LARGURA do template (1080px).
     """
     if mpe is None:
         logger.error("MoviePy não está disponível")
+        if task_id:
+            error_reels_progress(task_id, "MoviePy não disponível")
         return None
     
     if template_key not in LOCAL_REELS_TEMPLATES:
         logger.error(f"Template não encontrado: {template_key}")
+        if task_id:
+            error_reels_progress(task_id, "Template não encontrado")
         return None
     
     template = LOCAL_REELS_TEMPLATES[template_key]
+    
+    clip = None
+    bg = None
+    title_clip = None
+    composed = None
+    resized_clip = None
+    title_overlay_path = None
     
     try:
         width, height = template['dimensions']['width'], template['dimensions']['height']
         logger.info(f"Gerando reels: {width}x{height}")
         
+        if task_id:
+            update_reels_progress(task_id, 'init', 5, 'Inicializando...')
+        
         # Carrega vídeo
-        clip = None
         try:
             clip = mpe.VideoFileClip(source_media_path)
             logger.info(f"Vídeo: {clip.w}x{clip.h}, {clip.duration}s, {clip.fps} fps")
@@ -356,6 +369,9 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
                 img.save(temp_path)
             clip = mpe.ImageClip(temp_path).set_duration(5).set_fps(30)
         
+        if task_id:
+            update_reels_progress(task_id, 'load', 15, 'Vídeo carregado...')
+        
         # Template de fundo
         if template_key == 'reels_modelo_2':
             template_bg = os.path.join(os.path.dirname(__file__), "template2.jpg")
@@ -364,38 +380,40 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
             
         if not os.path.exists(template_bg):
             logger.error(f"Template não encontrado: {template_bg}")
+            if task_id:
+                error_reels_progress(task_id, "Template não encontrado")
             return None
+        
+        if task_id:
+            update_reels_progress(task_id, 'template', 30, 'Aplicando template...')
         
         # Fundo esticado
         bg = mpe.ImageClip(template_bg).set_duration(clip.duration).resize((width, height))
         
-        # ✅ NOVA LÓGICA: VÍDEO PREENCHE TODA A LARGURA
+        # ✅ VÍDEO PREENCHE TODA A LARGURA
         video_area_top = 400
         video_area_bottom = 1520
         video_area_height = video_area_bottom - video_area_top
         
-        # 🎯 VÍDEO OCUPA LARGURA TOTAL (1080px)
         video_target_width = width  # 1080px
-        
-        # Calcula altura proporcional
         original_aspect_ratio = clip.w / clip.h
         video_target_height = int(video_target_width / original_aspect_ratio)
         
-        # Se altura calculada exceder área disponível, ajusta
         if video_target_height > video_area_height:
             video_target_height = video_area_height
             video_target_width = int(video_target_height * original_aspect_ratio)
         
-        # Redimensiona vídeo
         resized_clip = clip.resize(newsize=(video_target_width, video_target_height))
         
-        # Centraliza vídeo na área disponível
         video_x = (width - video_target_width) // 2
         video_y = video_area_top + (video_area_height - video_target_height) // 2
         positioned_video = resized_clip.set_position((video_x, video_y))
         
         logger.info(f"✅ Vídeo: {video_target_width}x{video_target_height}")
         logger.info(f"✅ Posição: X={video_x}, Y={video_y}")
+
+        if task_id:
+            update_reels_progress(task_id, 'title', 45, 'Criando título...')
 
         # Cria título
         title_clip = None
@@ -419,7 +437,6 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
                 title_img = Image.new('RGBA', (width, canvas_height), (0, 0, 0, 0))
                 draw = ImageDraw.Draw(title_img)
                 
-                # Carrega fonte
                 font = None
                 try:
                     font = ImageFont.truetype("Oswald-Bold.ttf", font_size)
@@ -432,7 +449,6 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
                 text = title_text.upper().strip()
                 max_width = width - (margin_left * 2)
                 
-                # Quebra texto em linhas
                 words = text.split()
                 lines = []
                 current_line = []
@@ -454,7 +470,6 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
                 if current_line:
                     lines.append(' '.join(current_line))
                 
-                # Desenha texto
                 total_height = len(lines) * line_height
                 start_y = (canvas_height - total_height) // 2
                 
@@ -466,29 +481,32 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
                     y = start_y + i * line_height
                     draw.text((x, y), line, font=font, fill=(255, 255, 255, 255))
                 
-                # Salva título
                 title_filename = generate_filename("title_overlay", "png")
-                title_path = os.path.join(Config.UPLOAD_FOLDER, title_filename)
-                title_img.save(title_path, format='PNG')
+                title_overlay_path = os.path.join(Config.UPLOAD_FOLDER, title_filename)
+                title_img.save(title_overlay_path, format='PNG')
                 
-                title_clip = mpe.ImageClip(title_path).set_duration(clip.duration).set_position((0, title_y_position))
+                title_clip = mpe.ImageClip(title_overlay_path).set_duration(clip.duration).set_position((0, title_y_position))
                 logger.info("✅ Título criado")
                 
             except Exception as e:
                 logger.error(f"Erro no título: {e}")
 
-        # Composição: fundo + vídeo + título
+        if task_id:
+            update_reels_progress(task_id, 'compose', 60, 'Compondo vídeo...')
+
+        # Composição
         clips_to_compose = [bg, positioned_video]
         if title_clip:
             clips_to_compose.append(title_clip)
         
         composed = mpe.CompositeVideoClip(clips_to_compose)
         
-        # Preserva áudio
         if hasattr(clip, 'audio') and clip.audio:
             composed = composed.set_audio(clip.audio)
         
-        # Exporta
+        if task_id:
+            update_reels_progress(task_id, 'export', 70, 'Exportando...')
+        
         out_filename = generate_filename(template_key, "mp4")
         out_path = os.path.join(Config.UPLOAD_FOLDER, out_filename)
         
@@ -509,35 +527,37 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
         
         logger.info("✅ Vídeo gerado!")
         
-        # Cleanup
-        try:
-            clip.close()
-            resized_clip.close()
-            composed.close()
-            if title_clip:
-                title_clip.close()
-        except:
-            pass
+        if task_id:
+            update_reels_progress(task_id, 'completed', 100, 'Concluído!')
         
-        public_url = f"{request.url_root}uploads/{out_filename}"
+        if base_url:
+            public_url = f"{base_url}uploads/{out_filename}"
+        else:
+            public_url = f"{request.url_root}uploads/{out_filename}"
+        
+        if task_id:
+            complete_reels_progress(task_id, public_url)
+        
         return out_path, public_url
         
     except Exception as e:
         logger.error(f"❌ Erro: {e}")
         import traceback
         logger.error(traceback.format_exc())
+        if task_id:
+            error_reels_progress(task_id, str(e))
         return None
     
     finally:
-        # ✅ LIMPEZA
+        # ✅ LIMPEZA CORRIGIDA
         force_close_clips(clip, bg, title_clip, composed)
-        cleanup_files = []
-        if needs_cleanup_converted and converted_path:
-            cleanup_files.append(converted_path)
-        if title_overlay_path:
-            cleanup_files.append(title_overlay_path)
-        if cleanup_files:
-            cleanup_temp_files(*cleanup_files)
+        if resized_clip:
+            try:
+                resized_clip.close()
+            except:
+                pass
+        if title_overlay_path and os.path.exists(title_overlay_path):
+            cleanup_temp_files(title_overlay_path)
         aggressive_cleanup()
 
 def generate_local_capa_jornal(source_media_path: str, base_url: str = None) -> Optional[Tuple[str, str]]:
