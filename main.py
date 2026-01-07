@@ -432,7 +432,7 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
                     line_height = 70
                     text_align = 'center'
                     margin_left = 60
-                    title_y_position = video_area_top - 300
+                    title_y_position = video_area_top - 350
                 
                 title_img = Image.new('RGBA', (width, canvas_height), (0, 0, 0, 0))
                 draw = ImageDraw.Draw(title_img)
