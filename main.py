@@ -350,7 +350,7 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
             update_reels_progress(task_id, 'init', 5, 'Inicializando...')
 
         # Carrega vídeo DIRETO sem verificações pesadas
-try:
+        try:
     clip = mpe.VideoFileClip(source_media_path, audio=True, fps_source='fps')  # ✅ Usa FPS original
     logger.info(f"✅ Vídeo carregado: {clip.w}x{clip.h}")
 except:
@@ -361,7 +361,6 @@ except:
         temp_path = os.path.join(Config.UPLOAD_FOLDER, temp)
         img.save(temp_path)
     clip = mpe.ImageClip(temp_path).set_duration(5).set_fps(30)
-        
         if task_id:
             update_reels_progress(task_id, 'load', 15, 'Vídeo carregado...')
         
@@ -392,7 +391,7 @@ except:
         original_aspect_ratio = clip.w / clip.h
         video_target_height = int(video_target_width / original_aspect_ratio)
 
-if video_target_height > video_area_height:
+        if video_target_height > video_area_height:
         video_target_height = video_area_height
         video_target_width = int(video_target_height * original_aspect_ratio)
 
@@ -516,7 +515,7 @@ if video_target_height > video_area_height:
             threads=4,
             preset='ultrafast',
             verbose=False,
-            logger=None
+            logger=None,
             bitrate='5000k'
         )
         
