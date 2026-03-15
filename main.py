@@ -248,15 +248,8 @@ def verify_template_files() -> list:
     return missing
 
 def convert_video_if_needed(input_path: str) -> tuple:
-    """Converte vídeos problemáticos para MP4"""
-    if mpe is None:
-        return input_path, False
-    
-    needs_conversion = False
-    ext = os.path.splitext(input_path)[1].lower()
-    
-    if ext in ['.mov', '.hevc', '.3gp', '.avi', '.mkv']:
-        needs_conversion = True
+    """NÃO converte - usa vídeo original direto"""
+    return input_path, False  # ✅ Sempre retorna o arquivo original SEM converter
     
     if not needs_conversion:
         return input_path, False
@@ -355,19 +348,19 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
         
         if task_id:
             update_reels_progress(task_id, 'init', 5, 'Inicializando...')
-        
-        # Carrega vídeo
-        try:
-            clip = mpe.VideoFileClip(source_media_path)
-            logger.info(f"Vídeo: {clip.w}x{clip.h}, {clip.duration}s, {clip.fps} fps")
-        except:
-            # Se for imagem
-            with Image.open(source_media_path) as img:
-                img = img.convert('RGB')
-                temp = generate_filename("temp_img", "png")
-                temp_path = os.path.join(Config.UPLOAD_FOLDER, temp)
-                img.save(temp_path)
-            clip = mpe.ImageClip(temp_path).set_duration(5).set_fps(30)
+
+        # Carrega vídeo DIRETO sem verificações pesadas
+try:
+    clip = mpe.VideoFileClip(source_media_path, audio=True, fps_source='fps')  # ✅ Usa FPS original
+    logger.info(f"✅ Vídeo carregado: {clip.w}x{clip.h}")
+except:
+    # Imagem
+    with Image.open(source_media_path) as img:
+        img = img.convert('RGB')
+        temp = generate_filename("temp_img", "png")
+        temp_path = os.path.join(Config.UPLOAD_FOLDER, temp)
+        img.save(temp_path)
+    clip = mpe.ImageClip(temp_path).set_duration(5).set_fps(30)
         
         if task_id:
             update_reels_progress(task_id, 'load', 15, 'Vídeo carregado...')
@@ -387,22 +380,23 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
         if task_id:
             update_reels_progress(task_id, 'template', 30, 'Aplicando template...')
         
-        # Fundo esticado
-        bg = mpe.ImageClip(template_bg).set_duration(clip.duration).resize((width, height))
+        # ✅ Template JÁ tem o tamanho certo - não precisa resize
+        bg = mpe.ImageClip(template_bg).set_duration(clip.duration)
         
-        # ✅ VÍDEO PREENCHE TODA A LARGURA
+       # ✅ VÍDEO PREENCHE TODA A LARGURA - CÁLCULO SIMPLIFICADO
         video_area_top = 400
         video_area_bottom = 1520
         video_area_height = video_area_bottom - video_area_top
-        
+
         video_target_width = width  # 1080px
         original_aspect_ratio = clip.w / clip.h
         video_target_height = int(video_target_width / original_aspect_ratio)
-        
-        if video_target_height > video_area_height:
-            video_target_height = video_area_height
-            video_target_width = int(video_target_height * original_aspect_ratio)
-        
+
+if video_target_height > video_area_height:
+        video_target_height = video_area_height
+        video_target_width = int(video_target_height * original_aspect_ratio)
+
+        # ✅ Resize UMA VEZ SÓ, sem criar objeto intermediário
         resized_clip = clip.resize(newsize=(video_target_width, video_target_height))
         
         video_x = (width - video_target_width) // 2
@@ -519,10 +513,11 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
             fps=fps,
             codec='libx264',
             audio_codec='aac',
-            threads=2,
-            preset='medium',
+            threads=4,
+            preset='ultrafast',
             verbose=False,
             logger=None
+            bitrate='5000k'
         )
         
         logger.info("✅ Vídeo gerado!")
