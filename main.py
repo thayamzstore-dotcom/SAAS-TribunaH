@@ -348,19 +348,20 @@ def generate_local_reels_video(source_media_path: str, title_text: str, template
         
         if task_id:
             update_reels_progress(task_id, 'init', 5, 'Inicializando...')
-
+        
         # Carrega vídeo DIRETO sem verificações pesadas
         try:
-    clip = mpe.VideoFileClip(source_media_path, audio=True, fps_source='fps')  # ✅ Usa FPS original
-    logger.info(f"✅ Vídeo carregado: {clip.w}x{clip.h}")
-except:
-    # Imagem
-    with Image.open(source_media_path) as img:
-        img = img.convert('RGB')
-        temp = generate_filename("temp_img", "png")
-        temp_path = os.path.join(Config.UPLOAD_FOLDER, temp)
-        img.save(temp_path)
-    clip = mpe.ImageClip(temp_path).set_duration(5).set_fps(30)
+            clip = mpe.VideoFileClip(source_media_path, audio=True, fps_source='fps')
+            logger.info(f"✅ Vídeo carregado: {clip.w}x{clip.h}")
+        except:
+            # Imagem
+            with Image.open(source_media_path) as img:
+                img = img.convert('RGB')
+                temp = generate_filename("temp_img", "png")
+                temp_path = os.path.join(Config.UPLOAD_FOLDER, temp)
+                img.save(temp_path)
+            clip = mpe.ImageClip(temp_path).set_duration(5).set_fps(30)
+        
         if task_id:
             update_reels_progress(task_id, 'load', 15, 'Vídeo carregado...')
         
@@ -382,21 +383,25 @@ except:
         # ✅ Template JÁ tem o tamanho certo - não precisa resize
         bg = mpe.ImageClip(template_bg).set_duration(clip.duration)
         
-       # ✅ VÍDEO PREENCHE TODA A LARGURA - CÁLCULO SIMPLIFICADO
+       # ✅ VÍDEO PREENCHE TODA A LARGURA
         video_area_top = 400
         video_area_bottom = 1520
         video_area_height = video_area_bottom - video_area_top
-
+        
         video_target_width = width  # 1080px
         original_aspect_ratio = clip.w / clip.h
         video_target_height = int(video_target_width / original_aspect_ratio)
-
+        
+        # ✅ CORRIGIDO: só reduz SE ultrapassar a área
         if video_target_height > video_area_height:
-        video_target_height = video_area_height
-        video_target_width = int(video_target_height * original_aspect_ratio)
-
-        # ✅ Resize UMA VEZ SÓ, sem criar objeto intermediário
-        resized_clip = clip.resize(newsize=(video_target_width, video_target_height))
+            video_target_height = video_area_height
+            video_target_width = int(video_target_height * original_aspect_ratio)
+        
+        # ✅ Resize APENAS se necessário
+        if clip.w != video_target_width or clip.h != video_target_height:
+            resized_clip = clip.resize(newsize=(video_target_width, video_target_height))
+        else:
+            resized_clip = clip  # Usa original sem resize
         
         video_x = (width - video_target_width) // 2
         video_y = video_area_top + (video_area_height - video_target_height) // 2
@@ -479,7 +484,7 @@ except:
                 title_img.save(title_overlay_path, format='PNG')
                 
                 title_clip = mpe.ImageClip(title_overlay_path).set_duration(clip.duration).set_position((0, title_y_position))
-                logger.info("✅ Título criado")
+                logger.info("Título criado")
                 
             except Exception as e:
                 logger.error(f"Erro no título: {e}")
@@ -535,7 +540,7 @@ except:
         return out_path, public_url
         
     except Exception as e:
-        logger.error(f"❌ Erro: {e}")
+        logger.error(f"Erro: {e}")
         import traceback
         logger.error(traceback.format_exc())
         if task_id:
