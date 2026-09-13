@@ -677,7 +677,7 @@ def logout():
 @app.route('/')
 @login_required
 def index():
-    return render_template_string(HTML_TEMPLATE)
+    return render_template_string(HTML_TEMPLATE, sidebar=sidebar_html('gerar_post'), sidebar_css=SIDEBAR_CSS)
 
 @app.route('/api/process', methods=['POST'])
 def process_request():
