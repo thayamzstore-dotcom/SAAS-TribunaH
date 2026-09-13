@@ -14,6 +14,7 @@ from flask import Flask, request, jsonify, render_template_string, send_from_dir
 from functools import wraps
 from flask_cors import CORS
 from monitor_routes import init_monitor_module
+from layout import sidebar_html, SIDEBAR_CSS
 import requests
 import json
 import os
