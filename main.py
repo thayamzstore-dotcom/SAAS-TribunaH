@@ -13,6 +13,7 @@ if not hasattr(PIL.Image, 'ANTIALIAS'):
 from flask import Flask, request, jsonify, render_template_string, send_from_directory, session, redirect, url_for, Response, stream_with_context
 from functools import wraps
 from flask_cors import CORS
+from monitor_routes import init_monitor_module
 import requests
 import json
 import os
@@ -1537,6 +1538,10 @@ HTML_TEMPLATE = """
         <div class="header">
             <h1>PosTH APP - TRIBUNA HOJE</h1>
             <p>Ferramenta Completa Criação de Conteúdo no Instagram</p>
+            <p>Ferramenta Completa Criação de Conteúdo no Instagram</p>
+    <a href="/monitoramento" style="color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 10px 20px; border-radius: 5px; margin-top: 15px; margin-right: 10px; display: inline-block;">
+        🔎 Monitoramento
+            </a>
             <a href="/logout" style="color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 10px 20px; border-radius: 5px; margin-top: 15px; display: inline-block;">
                 🔒 Sair
             </a>
@@ -2107,6 +2112,8 @@ console.log('📤 Enviando para API:', { template: selectedTemplate, title: titu
 </body>
 </html>
 """
+# ✅ MONITORAMENTO DE NOTÍCIAS
+init_monitor_module(app, login_required=login_required, intervalo_horas=3)
 
 # ✅ MAIN
 if __name__ == '__main__':
