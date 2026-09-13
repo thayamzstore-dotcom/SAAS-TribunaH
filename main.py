@@ -1538,7 +1538,6 @@ HTML_TEMPLATE = """
         <div class="header">
             <h1>PosTH APP - TRIBUNA HOJE</h1>
             <p>Ferramenta Completa Criação de Conteúdo no Instagram</p>
-            <p>Ferramenta Completa Criação de Conteúdo no Instagram</p>
     <a href="/monitoramento" style="color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 10px 20px; border-radius: 5px; margin-top: 15px; margin-right: 10px; display: inline-block;">
         🔎 Monitoramento
             </a>
