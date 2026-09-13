@@ -1,5 +1,16 @@
 [
-  { "nome": "Tribuna Hoje", "url": "https://www.tribunahoje.com" },
-  { "nome": "Exemplo Portal A", "url": "https://www.exemplo-portal-a.com.br" },
-  { "nome": "Exemplo Portal B", "url": "https://www.exemplo-portal-b.com.br" }
+  { "nome": "Gazeta Web", "url": "https://www.gazetaweb.com/noticias/politica?d=1" },
+  { "nome": "TNH1", "url": "https://www.tnh1.com.br/noticias/editoria/politica/" },
+  { "nome": "G1 Política", "url": "https://g1.globo.com/politica/" },
+  { "nome": "Cada Minuto", "url": "https://www.cadaminuto.com.br/blog/politica" },
+  { "nome": "Alagoas 24 Horas", "url": "https://www.alagoas24horas.com.br/categorias/noticias/politica/" },
+  { "nome": "7Segundos Maceió", "url": "https://www.7segundos.com.br/maceio/noticias/politica" },
+  { "nome": "7Segundos Arapiraca", "url": "https://www.7segundos.com.br/arapiraca/noticias/politica" },
+  { "nome": "7Segundos Maragogi", "url": "https://www.7segundos.com.br/maragogi/noticias/politica" },
+  { "nome": "7Segundos Palmeira", "url": "https://www.7segundos.com.br/palmeira/noticias/politica" },
+  { "nome": "O Jornal Extra", "url": "https://ojornalextra.com.br/noticias/politica" },
+  { "nome": "T82", "url": "https://t82.com.br/noticias/politica" },
+  { "nome": "Estadão Alagoas", "url": "https://estadaoalagoas.com.br/editoria/politica/" },
+  { "nome": "Tribuna Hoje", "url": "https://tribunahoje.com/noticias/politica" },
+  { "nome": "CNN Brasil Política", "url": "https://www.cnnbrasil.com.br/politica/" }
 ]
