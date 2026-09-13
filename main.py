@@ -656,13 +656,7 @@ def reels_progress_stream(task_id):
         }
     )
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        if request.form.get('password') == APP_PASSWORD:
-            session['logged_in'] = True
-            return redirect(url_for('index'))
-        return "Senha incorreta", 401
+            return redirect(url_for('monitoramento_dashboard'))
     
     if session.get('logged_in'):
         return redirect(url_for('index'))
