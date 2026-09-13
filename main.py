@@ -1683,6 +1683,8 @@ HTML_TEMPLATE = """
             </div>
         </div>
     </div>
+</main>
+</div>
 """
 # Continuação do HTML_TEMPLATE - JavaScript
 HTML_TEMPLATE += """
