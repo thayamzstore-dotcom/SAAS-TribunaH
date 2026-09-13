@@ -1142,9 +1142,9 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>App Automação Instagram</title>
     <style>
+        {{ sidebar_css | safe }}
         * {
             margin: 0;
-            padding: 0;
             box-sizing: border-box;
         }
 
