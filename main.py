@@ -1540,6 +1540,9 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body>
+<div class="app-shell">
+{{ sidebar | safe }}
+<main class="app-content">
     <div class="container">
         <div class="header">
             <h1>PosTH APP - TRIBUNA HOJE</h1>
