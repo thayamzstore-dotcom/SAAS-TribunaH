@@ -14,7 +14,6 @@ from flask import Flask, request, jsonify, render_template_string, send_from_dir
 from functools import wraps
 from flask_cors import CORS
 from monitor_routes import init_monitor_module
-from layout import sidebar_html, SIDEBAR_CSS
 import requests
 import json
 import os
@@ -655,12 +654,13 @@ def reels_progress_stream(task_id):
             'Connection': 'keep-alive'
         }
     )
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         if request.form.get('password') == APP_PASSWORD:
             session['logged_in'] = True
-            return redirect(url_for('monitoramento_dashboard'))
+            return redirect(url_for('index'))
         return "Senha incorreta", 401
     
     if session.get('logged_in'):
@@ -676,7 +676,7 @@ def logout():
 @app.route('/')
 @login_required
 def index():
-    return render_template_string(HTML_TEMPLATE, sidebar=sidebar_html('gerar_post'), sidebar_css=SIDEBAR_CSS)
+    return render_template_string(HTML_TEMPLATE)
 
 @app.route('/api/process', methods=['POST'])
 def process_request():
@@ -995,13 +995,8 @@ LOGIN_TEMPLATE = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Tribuna Hoje</title>
-        <style>
-        {{ sidebar_css | safe }}
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -1141,9 +1136,9 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>App Automação Instagram</title>
     <style>
-        {{ sidebar_css | safe }}
         * {
             margin: 0;
+            padding: 0;
             box-sizing: border-box;
         }
 
@@ -1539,14 +1534,19 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body>
-<div class="app-shell">
-{{ sidebar | safe }}
-<main class="app-content">
     <div class="container">
         <div class="header">
-    <h1>PosTH APP - TRIBUNA HOJE</h1>
-    <p>Ferramenta Completa Criação de Conteúdo no Instagram</p>
-</div>
+            <h1>PosTH APP - TRIBUNA HOJE</h1>
+            <p>Ferramenta Completa Criação de Conteúdo no Instagram</p>
+            <p>Ferramenta Completa Criação de Conteúdo no Instagram</p>
+    <a href="/monitoramento" style="color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 10px 20px; border-radius: 5px; margin-top: 15px; margin-right: 10px; display: inline-block;">
+        🔎 Monitoramento
+            </a>
+            <a href="/logout" style="color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 10px 20px; border-radius: 5px; margin-top: 15px; display: inline-block;">
+                🔒 Sair
+            </a>
+        </div>
+
         <div class="tabs-container">
             <div class="tabs-nav">
                 <button class="tab-button active" onclick="switchTab('gerar-posts')">📱 Gerar Posts</button>
@@ -1675,8 +1675,6 @@ HTML_TEMPLATE = """
             </div>
         </div>
     </div>
-</main>
-</div>
 """
 # Continuação do HTML_TEMPLATE - JavaScript
 HTML_TEMPLATE += """
